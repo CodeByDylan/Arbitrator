@@ -1,0 +1,32 @@
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: wednesday
+    groups:
+      github-actions:
+        patterns: ["*"]
+    labels: [dependencies]
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+      day: wednesday
+    groups:
+      nuget-minor-and-patch:
+        update-types: [minor, patch]
+    labels: [dependencies]
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: dotnet-sdk
+    directory: /
+    schedule:
+      interval: weekly
+      day: wednesday
+    labels: [dependencies]
+    open-pull-requests-limit: 5
