@@ -3,7 +3,7 @@ using Arbitrator.Diagnostics;
 namespace Arbitrator.Dispatch;
 
 /// <summary>
-/// Creates the exceptions that report failures detected while dispatching a request.
+/// Creates the exceptions that report failures detected while sending a request or publishing a notification.
 /// </summary>
 internal static class DispatchErrors
 {

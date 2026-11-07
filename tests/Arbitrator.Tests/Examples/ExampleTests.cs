@@ -37,13 +37,19 @@ public sealed class ExampleTests
     }
 
     [Test]
-    public async Task Valid_deactivation_is_saved_inside_a_committed_transaction()
+    public async Task Valid_deactivation_is_saved_and_announced_inside_a_committed_transaction()
     {
         await using TestHost host = CreateHost();
 
         await host.Sender.SendAsync(new DeactivateCustomer(InMemoryCustomerRepository.KnownCustomerId, "Moved away"));
 
-        await Expect.EntriesAsync(host.Journal, "transaction begun", "saved", "committed");
+        await Expect.EntriesAsync(
+            host.Journal,
+            "transaction begun",
+            "saved",
+            "audit recorded",
+            "deactivation email queued",
+            "committed");
     }
 
     [Test]
@@ -103,6 +109,8 @@ public sealed class ExampleTests
                 .AddOpenBehavior(typeof(ValidationBehavior<,>))
                 .AddOpenBehavior(typeof(TransactionBehavior<,>))
                 .AddHandler<GetCustomerHandler>()
-                .AddHandler<DeactivateCustomerHandler>()));
+                .AddHandler<DeactivateCustomerHandler>()
+                .AddNotificationHandler<DeactivationAuditRecorder>()
+                .AddNotificationHandler<DeactivationEmailSender>()));
     }
 }

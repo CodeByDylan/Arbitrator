@@ -1,10 +1,12 @@
 namespace Arbitrator.Tests.Examples;
 
 /// <summary>
-/// Deactivates a customer through the scoped repository.
+/// Deactivates a customer through the scoped repository and announces the deactivation.
 /// </summary>
 /// <param name="customers">The repository of the current scope.</param>
-public sealed class DeactivateCustomerHandler(ICustomerRepository customers) : IRequestHandler<DeactivateCustomer>
+/// <param name="publisher">The publisher of the current scope.</param>
+public sealed class DeactivateCustomerHandler(ICustomerRepository customers, IPublisher publisher)
+    : IRequestHandler<DeactivateCustomer>
 {
     /// <inheritdoc/>
     public async Task HandleAsync(DeactivateCustomer request, CancellationToken cancellationToken)
@@ -14,5 +16,6 @@ public sealed class DeactivateCustomerHandler(ICustomerRepository customers) : I
 
         customer.Deactivate(request.Reason);
         await customers.SaveChangesAsync(cancellationToken);
+        await publisher.PublishAsync(new CustomerDeactivated(customer.Id, request.Reason), cancellationToken);
     }
 }

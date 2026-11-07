@@ -39,6 +39,11 @@ public sealed class TestHost : IAsyncDisposable
     public ISender Sender => Scope.ServiceProvider.GetRequiredService<ISender>();
 
     /// <summary>
+    /// Gets the publisher of <see cref="Scope"/>.
+    /// </summary>
+    public IPublisher Publisher => Scope.ServiceProvider.GetRequiredService<IPublisher>();
+
+    /// <summary>
     /// Gets the journal shared by the handlers and behaviors of this host.
     /// </summary>
     public Journal Journal => Provider.GetRequiredService<Journal>();

@@ -3,14 +3,14 @@
     <RootNamespace>Arbitrator</RootNamespace>
     <IsPackable>true</IsPackable>
     <IsAotCompatible>true</IsAotCompatible>
-    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionPrefix>0.2.0</VersionPrefix>
     <VersionSuffix>preview</VersionSuffix>
     <PackageId>Arbitrator</PackageId>
     <Authors>Dylan de Beer</Authors>
     <Copyright>Copyright © 2026 Dylan de Beer (DutchyD)</Copyright>
     <PackageProjectUrl>https://dylandebeer.nl/arbitrator</PackageProjectUrl>
-    <Description>A small, opinionated, in-process mediator: typed request dispatch to exactly one handler through a single, ordered pipeline, using Microsoft.Extensions.DependencyInjection scopes.</Description>
-    <PackageTags>mediator;request;handler;pipeline;dependency-injection</PackageTags>
+    <Description>A small, opinionated, in-process mediator: typed request dispatch to exactly one handler through a single, ordered pipeline, and notifications published to any number of handlers in registration order, using Microsoft.Extensions.DependencyInjection scopes.</Description>
+    <PackageTags>mediator;request;handler;pipeline;notification;dependency-injection</PackageTags>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <IncludeSymbols>true</IncludeSymbols>

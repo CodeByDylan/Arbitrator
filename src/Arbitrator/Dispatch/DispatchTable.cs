@@ -4,26 +4,28 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Arbitrator.Dispatch;
 
 /// <summary>
-/// The immutable map from request types to the invokers that run their pipelines.
+/// The immutable maps from request and notification types to the invokers that dispatch them.
 /// </summary>
 internal sealed class DispatchTable
 {
     private readonly FrozenDictionary<Type, RequestInvoker> _invokersByRequestType;
+    private readonly FrozenDictionary<Type, NotificationInvoker> _invokersByNotificationType;
 
     /// <summary>
     /// Creates a dispatch table.
     /// </summary>
-    /// <param name="invokersByRequestType">The invoker for each registered request type.</param>
-    private DispatchTable(FrozenDictionary<Type, RequestInvoker> invokersByRequestType)
+    /// <param name="maps">The request and notification invokers.</param>
+    private DispatchTable(DispatchMaps maps)
     {
-        _invokersByRequestType = invokersByRequestType;
+        _invokersByRequestType = maps.RequestInvokers;
+        _invokersByNotificationType = maps.NotificationInvokers;
     }
 
     /// <summary>
     /// Creates the dispatch table of one service provider after verifying that the provider can resolve every
     /// handler and behavior the table refers to.
     /// </summary>
-    /// <param name="invokersByRequestType">The invoker for each registered request type.</param>
+    /// <param name="maps">The request and notification invokers.</param>
     /// <param name="keyedServices">
     /// The provider's keyed-service lookup, or <see langword="null"/> when the provider does not offer one.
     /// </param>
@@ -31,16 +33,14 @@ internal sealed class DispatchTable
     /// <exception cref="ArbitratorConfigurationException">
     /// A handler or behavior was registered after the provider was built.
     /// </exception>
-    public static DispatchTable Create(
-        FrozenDictionary<Type, RequestInvoker> invokersByRequestType,
-        IServiceProviderIsKeyedService? keyedServices)
+    public static DispatchTable Create(DispatchMaps maps, IServiceProviderIsKeyedService? keyedServices)
     {
         if (keyedServices is not null)
         {
-            EnsureComponentsAreRegistered(invokersByRequestType.Values, keyedServices);
+            EnsureComponentsAreRegistered(maps, keyedServices);
         }
 
-        return new DispatchTable(invokersByRequestType);
+        return new DispatchTable(maps);
     }
 
     /// <summary>
@@ -62,30 +62,59 @@ internal sealed class DispatchTable
     }
 
     /// <summary>
+    /// Finds the invoker for the exact runtime type of a notification.
+    /// </summary>
+    /// <param name="notificationType">The runtime type of the notification.</param>
+    /// <returns>
+    /// The invoker, or <see langword="null"/> when no handler is registered for the notification type.
+    /// </returns>
+    public NotificationInvoker? FindNotificationInvoker(Type notificationType)
+    {
+        return _invokersByNotificationType.GetValueOrDefault(notificationType);
+    }
+
+    /// <summary>
     /// Rejects handlers and behaviors that the provider cannot resolve because they were registered after it was
     /// built.
     /// </summary>
-    /// <param name="invokers">The invokers of the table.</param>
+    /// <param name="maps">The request and notification invokers.</param>
     /// <param name="keyedServices">The provider's keyed-service lookup.</param>
     /// <exception cref="ArbitratorConfigurationException">
     /// A handler or behavior is missing from the provider.
     /// </exception>
-    private static void EnsureComponentsAreRegistered(
-        IEnumerable<RequestInvoker> invokers,
-        IServiceProviderIsKeyedService keyedServices)
+    private static void EnsureComponentsAreRegistered(DispatchMaps maps, IServiceProviderIsKeyedService keyedServices)
     {
+        IEnumerable<Type> requestComponentTypes =
+            maps.RequestInvokers.Values.SelectMany(invoker => invoker.ComponentTypes);
+        IEnumerable<Type> notificationHandlerTypes =
+            maps.NotificationInvokers.Values.SelectMany(invoker => invoker.ComponentTypes);
         Type[] missingComponentTypes =
         [
-            .. invokers
-                .SelectMany(invoker => invoker.ComponentTypes)
-                .Distinct()
-                .Where(componentType => !keyedServices.IsKeyedService(componentType, ArbitratorServiceKey.Instance)),
+            .. FindUnregistered(requestComponentTypes, ArbitratorServiceKey.RequestComponents, keyedServices),
+            .. FindUnregistered(notificationHandlerTypes, ArbitratorServiceKey.NotificationHandlers, keyedServices),
         ];
 
         if (missingComponentTypes.Length > 0)
         {
             throw DispatchErrors.ComponentsMissingFromProvider(missingComponentTypes);
         }
+    }
+
+    /// <summary>
+    /// Finds the component types that a provider has no registration for under a service key.
+    /// </summary>
+    /// <param name="componentTypes">The component types.</param>
+    /// <param name="serviceKey">The Arbitrator service key for the components' role.</param>
+    /// <param name="keyedServices">The provider's keyed-service lookup.</param>
+    /// <returns>The distinct component types missing from the provider.</returns>
+    private static IEnumerable<Type> FindUnregistered(
+        IEnumerable<Type> componentTypes,
+        ArbitratorServiceKey serviceKey,
+        IServiceProviderIsKeyedService keyedServices)
+    {
+        return componentTypes
+            .Distinct()
+            .Where(componentType => !keyedServices.IsKeyedService(componentType, serviceKey));
     }
 
     /// <summary>

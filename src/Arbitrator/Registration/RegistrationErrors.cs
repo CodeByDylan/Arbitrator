@@ -198,7 +198,7 @@ internal static class RegistrationErrors
     public static ArbitratorConfigurationException RegistrationFrozen()
     {
         return new("Arbitrator registrations cannot change once a service provider has attempted to resolve "
-            + "ISender. Complete all AddArbitrator calls before building the service provider.");
+            + "ISender or IPublisher. Complete all AddArbitrator calls before building the service provider.");
     }
 
     /// <summary>
