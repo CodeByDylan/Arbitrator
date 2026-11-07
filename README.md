@@ -1,5 +1,7 @@
 # Arbitrator
 
+[![CI](https://github.com/CodeByDylan/Arbitrator/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/CodeByDylan/Arbitrator/actions/workflows/ci.yml)
+
 A small, opinionated, in-process mediator for .NET 11.
 
 Arbitrator sends a typed request to exactly one handler, and publishes notifications to any number of handlers. Along
@@ -175,3 +177,8 @@ Registration closes generic types at runtime and inspects request types through 
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
+
+## Releases
+
+Every pull request is built and tested by CI. Publishing a GitHub Release from a `v` tag publishes that version to
+nuget.org through Trusted Publishing; `docs/releasing.md` in the source repository describes the procedure.

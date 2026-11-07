@@ -937,7 +937,7 @@ No assertion or mocking packages are added. TUnit's assertions and hand-written 
 ### 9.5 Versioning and compatibility
 
 - The version follows SemVer. Any 0.x release may break the API. Breaking changes are listed in the release notes.
-- Nothing is published until the package references and SDK are the stable `11.0.0`/`11.0.100` releases.
+- Preview versions (a numbered `alpha`, `beta`, `preview`, or `rc` label, such as `0.2.0-preview.1`) may be published while the pinned SDK is itself a preview. A stable version can only be published once `global.json` pins a stable SDK; the release workflow enforces this. See `docs/releasing.md` and `docs/design/ci-and-release.md`.
 
 ### 9.6 License
 
@@ -1046,7 +1046,7 @@ These are kept separate from correctness tests and have no pass or fail targets.
 | **M5 Lifecycle and concurrency** | Scope, disposal, nested-send, and concurrency tests, with fixes where they fail | S1–S4, L1–L3, and X1–X3 pass. Every row of §7 maps to a passing test |
 | **M6 Diagnostics and trimming review** | `TypeNameFormatter`, a message review against §8.2, trimming and AOT analyzer warnings resolved by annotation, final placement of `RequiresDynamicCode` | Zero analyzer warnings, no blanket suppressions, message tests pass |
 | **M7 Documentation and packaging** | README (quick start, contract summary), the §4.4 examples in `tests/Examples`, package metadata, `LICENSE` (needs §9.6), `dotnet pack` | The package contains its README, XML documentation, and symbols. A throwaway console app consumes it from a local feed and dispatches successfully |
-| **M8 Release v0.1.0** | Switch to the stable `11.0.0` packages and `11.0.100` SDK, a clean NuGetAudit, a `v0.1.0` tag, publishing | All tests pass on the GA toolchain and the package is published |
+| **M8 Release** | Publishing a GitHub Release from a `v` tag runs the release workflow: it verifies the tag against the project version, builds and tests through CI, and publishes to nuget.org with Trusted Publishing. Stable versions require the stable `11.0.0` packages and `11.0.100` SDK | The release workflow succeeds, and the package is installable from nuget.org |
 | **M9 Benchmarks (optional)** | `benchmarks/Arbitrator.Benchmarks` | The benchmarks in §10.3 run on `net11.0` |
 
 **Rollout and rollback.** v0.1 is a new package with no existing consumers to migrate and no persisted state. If a defect is found after publishing, the release is unlisted on NuGet and fixed in 0.1.1. Consumers roll back by pinning the previous version.
