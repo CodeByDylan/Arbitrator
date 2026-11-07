@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | Approved; v0.1 implemented |
+| Status | Approved; v0.1 implemented; v0.2 (notifications) implemented |
 | Target | `net11.0`, C# 15 |
 | Date | 2026-11-07 |
 | Package | `Arbitrator` (single package) |
@@ -22,7 +22,7 @@ Arbitrator is a small, opinionated, in-process mediator for .NET 11. It sends a 
 - One custom exception type for configuration errors. Every other exception passes through untouched.
 - One NuGet package with no package dependencies. On .NET 11, `Microsoft.Extensions.DependencyInjection.Abstractions` ships in the shared framework.
 
-Notifications are deferred to v0.2 (§13). Native AOT support isn't claimed (§5.11).
+**v0.2.0 adds notifications:** an `INotification` published through a scoped `IPublisher` to zero or more `INotificationHandler<TNotification>` handlers, run one after another in registration order. Section 5.12 describes them, and `docs/design/notifications.md` records the feature design. Native AOT support isn't claimed (§5.11).
 
 ### Current state
 
@@ -44,7 +44,7 @@ The repository holds an empty `Arbitrator.slnx` and a `.gitignore`. It has no pr
 
 ### Non-goals for v0.1
 
-Streaming requests. Notifications (deferred). Source generators. Assembly scanning. Parallel notification publishing. Built-in retries, validation, logging, transactions, or EF Core integration. Polymorphic handler resolution. Containers other than MS.DI. Object-based dispatch (`Send(object)`). A prescribed result or error type. Distributed messaging, persistence, or outbox. MediatR API compatibility. A Native AOT compatibility guarantee.
+Streaming requests. Source generators. Assembly scanning. Parallel notification publishing. Built-in retries, validation, logging, transactions, or EF Core integration. Polymorphic handler resolution. Containers other than MS.DI. Object-based dispatch (`Send(object)`). A prescribed result or error type. Distributed messaging, persistence, or outbox. MediatR API compatibility. A Native AOT compatibility guarantee.
 
 ### Design principles
 
@@ -81,11 +81,12 @@ These are the opinions that set Arbitrator apart from other mediators:
 | 14 | Cancellation | One check at entry, after the handler lookup. After that the token is only forwarded. | Skips work for requests that are already doomed, and configuration errors still surface regardless of the token. | Behaviors never see a send whose token was already canceled. | Yes |
 | 15 | Failure channel | `SendAsync` reports every failure through its returned `Task` and never throws synchronously. | Every failure behaves the same way under `await`. | None of note. | Yes |
 | 16 | Exception taxonomy | `ArbitratorConfigurationException : InvalidOperationException`, plus standard BCL exceptions. | Lets callers tell an Arbitrator misconfiguration apart from an `InvalidOperationException` thrown by a handler. | One more public type. | Yes |
-| 17 | Notifications | Deferred to v0.2. | Keeps the v0.1 surface focused on requests. | Applications that need in-process fan-out must wait for v0.2 or write their own. | No |
+| 17 | Notifications | Deferred to v0.2 (superseded by decision 22). | Keeps the v0.1 surface focused on requests. | Applications that need in-process fan-out must wait for v0.2 or write their own. | No |
 | 18 | Packaging | A single `Arbitrator` package. | A separate abstractions package has no consumer yet, and type forwarding lets it be split out later without breaking anyone. | Assemblies that only define contracts also reference `Microsoft.Extensions.DependencyInjection.Abstractions`. | No (decide before publishing) |
 | 19 | Trimming and AOT | Trimming annotations and AOT analyzers are enabled, with `RequiresDynamicCode` and `RequiresUnreferencedCode` on the entry points that use reflection. No AOT claim. | Honest about the reflection that remains. | Native AOT consumers get warnings. | No |
 | 20 | License | Apache-2.0 (§9.6). | Explicit patent grant; compatible with every dependency. | Longer than MIT. | Settled |
 | 21 | Test framework | TUnit on Microsoft.Testing.Platform. | Owner preference; source-generated discovery, parallel by default, async assertions. | Assertions are awaited, unlike xUnit's synchronous `Assert`. | Settled |
+| 22 | Notifications (v0.2) | A separate scoped `IPublisher`; `AddNotificationHandler<T>()`; exact runtime type; closed handlers only; sequential in registration order; cancellation checked before resolution and before each handler; no notification pipeline. | Mirrors the request contract's predictability, and keeps "exactly one" and "zero or more" registrations apart. | No handlers for base types, no open-generic handlers, and latency grows with the handler count. | Settled |
 
 ### Alternatives considered
 
@@ -160,6 +161,19 @@ public interface ISender
     Task SendAsync(IRequest request, CancellationToken cancellationToken = default);
 }
 
+public interface INotification;
+
+public interface INotificationHandler<TNotification>
+    where TNotification : INotification
+{
+    Task HandleAsync(TNotification notification, CancellationToken cancellationToken);
+}
+
+public interface IPublisher
+{
+    Task PublishAsync(INotification notification, CancellationToken cancellationToken = default);
+}
+
 public sealed class ArbitratorConfigurationException : InvalidOperationException
 {
     public ArbitratorConfigurationException(string message);
@@ -205,12 +219,16 @@ public sealed class ArbitratorBuilder
     [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
     [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
     public ArbitratorBuilder AddOpenBehavior(Type openBehaviorType);
+
+    [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
+    public ArbitratorBuilder AddNotificationHandler<THandler>() where THandler : class;
 }
 ```
 
 - `AddHandler<THandler>()` registers every closed `IRequestHandler<,>` contract that `THandler` implements.
 - `AddBehavior<TBehavior>()` registers a closed behavior, which applies to every `IPipelineBehavior<TRequest, TResponse>` it implements.
 - `AddOpenBehavior(typeof(X<,>))` registers an open-generic behavior.
+- `AddNotificationHandler<THandler>()` registers every closed `INotificationHandler<>` contract `THandler` implements, after every notification handler registered before it. Any number of handler types may handle one notification type.
 - Each builder call either completes entirely or changes nothing: it validates first and only then mutates. The methods return the builder so calls can be chained.
 - `THandler`, `TBehavior`, and `openBehaviorType` carry `[DynamicallyAccessedMembers(PublicConstructors | Interfaces)]` (§5.11).
 - `AddArbitrator` lives in `Microsoft.Extensions.DependencyInjection` so that it's discoverable through the implicit usings of ASP.NET Core and Worker projects. This is a deliberate exception to the rule that namespaces match folders.
@@ -268,7 +286,7 @@ public sealed class GetCustomerHandler(ICustomerRepository customers)
 **Handler for a request with no response:**
 
 ```csharp
-public sealed class DeactivateCustomerHandler(ICustomerRepository customers)
+public sealed class DeactivateCustomerHandler(ICustomerRepository customers, IPublisher publisher)
     : IRequestHandler<DeactivateCustomer>
 {
     public async Task HandleAsync(DeactivateCustomer request, CancellationToken cancellationToken)
@@ -278,9 +296,24 @@ public sealed class DeactivateCustomerHandler(ICustomerRepository customers)
 
         customer.Deactivate(request.Reason);
         await customers.SaveChangesAsync(cancellationToken);
+        await publisher.PublishAsync(new CustomerDeactivated(customer.Id, request.Reason), cancellationToken);
     }
 }
 ```
+
+**Notification and handlers (v0.2):**
+
+```csharp
+public sealed record CustomerDeactivated(Guid CustomerId, string Reason) : INotification;
+
+public sealed class DeactivationAuditRecorder(IAuditLog audit) : INotificationHandler<CustomerDeactivated>
+{
+    public Task HandleAsync(CustomerDeactivated notification, CancellationToken cancellationToken) =>
+        audit.RecordAsync($"Customer {notification.CustomerId} deactivated", cancellationToken);
+}
+```
+
+Registration adds `.AddNotificationHandler<DeactivationAuditRecorder>()` and `.AddNotificationHandler<DeactivationEmailSender>()` to the same `AddArbitrator` call. The two handlers run in that order whenever a customer is deactivated.
 
 **Logging behavior (open generic, applies to every request):**
 
@@ -457,7 +490,7 @@ Because emission is incremental (steps 3 and 5), the relative order of handler a
 
 ### 5.3 Building the dispatch table (internal)
 
-The `DispatchTable` singleton is created the first time a provider resolves `ISender`. Creation proceeds as follows:
+The `DispatchTable` singleton is created the first time a provider resolves `ISender` or `IPublisher`. Creation proceeds as follows:
 
 1. Marks the registry as frozen. Any later builder call throws `ArbitratorConfigurationException`.
 2. Checks that every closed behavior applies to at least one registered handler contract. Otherwise it throws `ArbitratorConfigurationException`, and because the singleton factory threw, every attempt to resolve `ISender` fails the same way.
@@ -583,6 +616,25 @@ A handler or behavior may inject `ISender` and send another request. Here's what
   - No coordination of transactions or ordering beyond what the code itself awaits.
   - No protection when nested sends run concurrently against shared scoped services.
 
+### 5.12 Notification dispatch (v0.2)
+
+**Contract.**
+- **Selection.** `IPublisher.PublishAsync` reaches every handler registered for the notification's exact runtime type. Handlers for base types or interfaces don't run, so a derived notification can reach no handlers at all; sealed notification types are recommended.
+- **Order.** Handlers run one after another, in the order of their `AddNotificationHandler` calls across all `AddArbitrator` calls. Each is awaited before the next starts.
+- **Steps.**
+  1. A null notification faults the task with `ArgumentNullException`.
+  2. If no handler is registered for the runtime type, publishing succeeds immediately, without inspecting the token.
+  3. Otherwise the token is checked, then every handler is resolved from the publisher's scope before the first runs.
+  4. The token is checked again before each handler.
+  5. A handler returning a null task is reported by name. The first exception stops publication and reaches the caller unwrapped, and handlers that already ran keep their effects.
+- **Context.** After every handler except the last, Arbitrator resumes on the caller's captured context, so every handler starts on the context the caller published from. It doesn't return to that context after the last handler, so a single-handler publish can't deadlock a caller that blocks on it. This is the one place the library doesn't use `ConfigureAwait(false)`. Publishing must be awaited: with several handlers, a caller blocking on a single-threaded context deadlocks.
+- **No pipeline.** Request behaviors never wrap notification handlers, and there is no notification behavior abstraction.
+
+**Internal (non-normative).**
+- **Registration.** `RegisteredNotificationHandlers` keeps, per notification type, a `NotificationPlan` with the ordered handler types and a `NotificationInvoker<TNotification>` template.
+- **Freezing.** `Registrations` bundles the request pipelines, behaviors, and notification handlers. It produces `DispatchMaps`, which the dispatch table is built from.
+- **Shared machinery.** The provider check, the freeze, copied-collection isolation, and the read-only check all cover notification handlers.
+
 ### 5.11 Trimming and Native AOT (considerations, not promises)
 
 - **Reflection still in use.** Arbitrator calls `GetInterfaces` on handler and behavior types and `MakeGenericType` to close invokers and open behaviors over request and response types. Some of those types are value types, such as `Unit` and `int`. Explicit registration names the types, but it doesn't remove this runtime generic instantiation. Explicit registration therefore isn't evidence of AOT compatibility.
@@ -601,10 +653,12 @@ A handler or behavior may inject `ISender` and send another request. Here's what
 | Service | Lifetime | Registration |
 | --- | --- | --- |
 | `ISender` (internal `Sender`) | Scoped | Unkeyed. The application may inject it anywhere a scoped service is valid |
+| `IPublisher` (internal `Publisher`) | Scoped | Unkeyed, like `ISender` |
 | Dispatch table and registry | Singleton | Internal types only |
 | Handlers | Transient | Keyed with the private key, registered as their implementation type, one descriptor per handler type |
 | Closed behaviors | Transient | Keyed, registered as their implementation type |
 | Open behaviors | Transient | Keyed. One closed descriptor per applicable registered request |
+| Notification handlers | Transient | Keyed under a separate notification handler key, registered as their implementation type. A class registered as both a request handler and a notification handler has one registration per role |
 
 A handler that implements several contracts has one descriptor and still gets a new instance for every send. If the application also registers a handler type itself, for example `AddScoped<GetCustomerHandler>()`, that registration is separate and Arbitrator never uses it.
 
@@ -644,7 +698,7 @@ The DI container owns disposal, and Arbitrator never calls `Dispose` or `Dispose
 
 **Other cases**
 
-- **Changes after freezing.** Builder calls made after a provider has attempted to build the dispatch table throw `ArbitratorConfigurationException`. This holds even when the attempt failed, so the registrations a provider was checked against can't change underneath it.
+- **Changes after freezing.** Builder calls made after a provider has attempted to build the dispatch table (by resolving `ISender` or `IPublisher`) throw `ArbitratorConfigurationException`. This holds even when the attempt failed, so the registrations a provider was checked against can't change underneath it.
 - **Registrations after a provider was built.** Registrations made after `BuildServiceProvider`, but before that provider first resolves `ISender`, are accepted. That provider can't resolve them, so its first `ISender` resolution throws `ArbitratorConfigurationException` naming them (§5.3).
 - **Read-only collections.** Builder calls on a read-only collection (for example after `HostApplicationBuilder.Build()`) throw `ArbitratorConfigurationException` before anything changes.
 - **Copied collections.** A collection whose descriptors were copied from another collection initially shares the original's registry. On its first `AddArbitrator` call it replaces that registry with an independent, unfrozen copy, so later registrations on either collection don't affect the other.
@@ -656,7 +710,7 @@ The DI container owns disposal, and Arbitrator never calls `Dispose` or `Dispose
 | --- | --- | --- |
 | **Registration** (each builder call, atomic) | Null arguments. A read-only collection. Invalid handler or behavior shapes, including value-type, generic-parameter, and partially closed behavior types. Abstract request types, and request types with more than one `IRequest<>`. All duplicate cases. Calls made after freezing | Constructor dependencies. Whether the application has requests without handlers |
 | **Container validation** (`ValidateOnBuild`, `ValidateScopes`) | Unresolvable constructor dependencies of every handler and every behavior instantiation that applies to a registered request, because all of them are closed keyed descriptors. Singletons that depend on `ISender`. Lifetime violations inside application services | Exceptions thrown by constructors. Arbitrator's own cross-registration rules |
-| **First `ISender` resolution** in a provider | Closed behaviors that match no registered handler contract. Handlers and behaviors registered after the provider was built | Requests that are never registered |
+| **First `ISender` or `IPublisher` resolution** in a provider | Closed behaviors that match no registered handler contract. Handlers and behaviors registered after the provider was built | Requests that are never registered |
 | **Dispatch** | Null request. A request type with no handler, including derived types of handled requests. Constructor exceptions. A continuation invoked twice. Null `Task` results | n/a |
 | **Never** | Arbitrator can't prove that every request type in the application has a handler. It doesn't check that handlers honor cancellation, or that a non-nullable `TResponse` is actually non-null | |
 
@@ -699,6 +753,12 @@ The DI container owns disposal, and Arbitrator never calls `Dispose` or `Dispose
 | 27 | A handler returns null for a non-nullable `TResponse` | Not checked. The value is returned as is | Not checked |
 | 28 | One class implements several handler contracts | Each contract dispatches normally, with a new instance per send | Arbitrator |
 | 29 | `SendAsync` called without being awaited | Never throws synchronously. Every failure in this table appears through the returned `Task` | Arbitrator |
+| 30 | Notification with no handlers for its runtime type | Publishing succeeds. Nothing is resolved and the token isn't inspected | Arbitrator |
+| 31 | Several notification handlers | They run sequentially in registration order, each awaited before the next | Arbitrator |
+| 32 | A notification handler throws | The same exception instance reaches the caller. Later handlers don't run; earlier handlers keep their effects | Forwarded |
+| 33 | Token canceled before or between notification handlers | The publish is canceled with the caller's token, and the remaining handlers don't run | **Checked by Arbitrator** |
+| 34 | Notification derived from a handled notification type | Reaches no handlers, and publishing succeeds | Arbitrator |
+| 35 | Publishing or sending from inside a notification handler | Permitted, in the same scope, with no recursion detection | Arbitrator |
 
 **Example of token substitution (row 20):**
 
@@ -758,13 +818,17 @@ Type names in messages use C# syntax and include namespaces, for example `IReque
 | Duplicate behavior | Registration | `Behavior 'Contoso.Pipeline.LoggingBehavior<,>' is already registered at position 1. Each behavior may be registered once; its registration position defines its place in the pipeline.` |
 | Behavior would run twice | Registration | `Behavior 'Contoso.Pipeline.LoggingBehavior<Contoso.Customers.GetCustomer, Contoso.Customers.CustomerDto?>' would run twice for request 'Contoso.Customers.GetCustomer': registered as a closed behavior at position 3 and produced by open behavior 'Contoso.Pipeline.LoggingBehavior<,>' at position 1.` |
 | Closed behavior with no handler | First `ISender` resolution | `Behavior 'Contoso.Customers.AuditDeactivationBehavior' implements IPipelineBehavior<Contoso.Customers.DeactivateCustomer, Arbitrator.Unit>, but no handler is registered for 'Contoso.Customers.DeactivateCustomer'.` |
-| Change after freezing | Registration | `Arbitrator registrations cannot change once a service provider has attempted to resolve ISender. Complete all AddArbitrator calls before building the service provider.` |
+| Change after freezing | Registration | `Arbitrator registrations cannot change once a service provider has attempted to resolve ISender or IPublisher. Complete all AddArbitrator calls before building the service provider.` |
 | Registered after the provider was built | First `ISender` resolution | `These handlers and behaviors were registered after this service provider was built, so it cannot resolve them: 'Contoso.Customers.LateHandler'. Complete all AddArbitrator calls before building the service provider.` |
 | Continuation invoked twice | Dispatch | `Behavior 'Contoso.Pipeline.RetryBehavior<Contoso.Customers.GetCustomer, Contoso.Customers.CustomerDto?>' invoked its continuation more than once while handling 'Contoso.Customers.GetCustomer'. A continuation may be invoked at most once.` |
 | Null `Task` | Dispatch | `Handler 'Contoso.Customers.GetCustomerHandler' returned a null Task while handling 'Contoso.Customers.GetCustomer'.` |
 | DI activation failure | Container validation or dispatch | MS.DI's own message, unwrapped, for example `Unable to resolve service for type 'Contoso.Customers.ICustomerRepository' while attempting to activate 'Contoso.Customers.GetCustomerHandler'.` |
 | Cancellation | Entry or user code | The standard `OperationCanceledException` message. Its `CancellationToken` is the caller's token when the entry check throws |
 | Exceptions from handlers and behaviors | Dispatch | Unchanged. Arbitrator adds no message |
+| Notification handler type registered twice | Registration | `Notification handler type 'Contoso.Audit.AuditRecorder' is already registered. Each notification handler type may be registered once across all AddArbitrator calls.` |
+| No notification contract | Registration | `Type 'Contoso.Audit.AuditService' cannot be registered as a notification handler: it does not implement INotificationHandler<TNotification>.` |
+| Abstract notification type | Registration | `Notification handler 'Contoso.Audit.AuditRecorder' handles 'Contoso.Events.DomainEvent', which is abstract or an interface. Notifications are published by their exact runtime type, so this handler could never run; register a handler for each concrete notification type.` |
+| Null notification | Publish | `ArgumentNullException` for parameter `notification` |
 
 ### 8.3 Security considerations
 
@@ -956,6 +1020,10 @@ The owner chose **Apache-2.0**. `LICENSE` holds the unmodified license text, and
 - **X2.** 100 concurrent sends in one scope succeed, each with a distinct handler instance.
 - **X3.** 64 concurrent first sends on a fresh provider all succeed with identical pipelines.
 
+### 10.4 Notifications (v0.2)
+
+The acceptance criteria PN1–PN8, PC1–PC4, PE1–PE4, PR1–PR7, PV1–PV2, PS1–PS2, PX1–PX2 and PD1–PD4 in `docs/design/notifications.md` apply. The tests live in `tests/Arbitrator.Tests/Notifications/` and in the examples suite.
+
 ### 10.3 Optional performance benchmarks (M9)
 
 These are kept separate from correctness tests and have no pass or fail targets. Their results are used only to compare one revision with another.
@@ -1009,7 +1077,9 @@ These are kept separate from correctness tests and have no pass or fail targets.
 
 | Feature | What would justify adding it |
 | --- | --- |
-| **Notifications** (planned for v0.2) | An application needs in-process fan-out, such as domain events. The semantics would be: `IPublisher.PublishAsync` is awaited; handlers run sequentially in registration order; the first exception stops publication and propagates; zero handlers counts as success; request behaviors don't apply. There would be no parallel and no fire-and-forget publishing. This would be in-process dispatch only, with no durability, transactional publication, or outbox |
+| **Notifications** | Delivered in v0.2 (§5.12) |
+| Open-generic or polymorphic notification handlers | A real need for one handler across many notification types that registering each type can't meet |
+| A notification pipeline | Cross-cutting concerns around notification handlers that can't reasonably live inside the handlers |
 | Configurable lifetimes | Measured construction cost, or a real need for scoped or singleton handler state |
 | Registry inspection API | Applications want a test asserting that every `IRequest<>` type in an assembly has a handler |
 | `Arbitrator.Abstractions` package | Contract-only assemblies must avoid the DI abstractions dependency, or a second container integration appears |

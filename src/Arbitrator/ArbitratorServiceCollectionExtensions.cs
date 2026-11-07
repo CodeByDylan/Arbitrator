@@ -16,11 +16,12 @@ public static class ArbitratorServiceCollectionExtensions
         /// Adds Arbitrator's services and the handlers and behaviors registered by <paramref name="configure"/>.
         /// </summary>
         /// <remarks>
-        /// <see cref="ISender"/> is registered as a scoped service: resolve it from the scope whose services the
-        /// handlers and behaviors should use. The method may be called more than once on the same collection; every
-        /// call adds to the same registrations, and behavior order follows the order of registration calls. A
-        /// collection whose descriptors were copied from another collection receives its own registrations on its
-        /// first call, so later registrations on either collection do not affect the other.
+        /// <see cref="ISender"/> and <see cref="IPublisher"/> are registered as scoped services: resolve them from the
+        /// scope whose services the handlers and behaviors should use. The method may be called more than once on the
+        /// same collection; every call adds to the same registrations, and behavior and notification handler order
+        /// follows the order of registration calls. A collection whose descriptors were copied from another
+        /// collection receives its own registrations on its first call, so later registrations on either collection
+        /// do not affect the other.
         /// </remarks>
         /// <param name="configure">Registers handlers and behaviors.</param>
         /// <returns>The service collection.</returns>
@@ -71,7 +72,7 @@ public static class ArbitratorServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Adds the registry, the dispatch table, and the scoped sender on the first call.
+    /// Adds the registry, the dispatch table, and the scoped sender and publisher on the first call.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The new registry.</returns>
@@ -84,6 +85,7 @@ public static class ArbitratorServiceCollectionExtensions
             provider.GetRequiredService<ArbitratorRegistry>().Freeze(),
             provider.GetService<IServiceProviderIsKeyedService>()));
         services.AddScoped<ISender, Sender>();
+        services.AddScoped<IPublisher, Publisher>();
 
         return registry;
     }

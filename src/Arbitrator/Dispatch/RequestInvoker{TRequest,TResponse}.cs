@@ -47,7 +47,7 @@ internal sealed class RequestInvoker<TRequest, TResponse> : RequestInvoker<TResp
         IPipelineBehavior<TRequest, TResponse>[] behaviors = ResolveBehaviors(services);
         var handler = (IRequestHandler<TRequest, TResponse>)services.GetRequiredKeyedService(
             _handlerType,
-            ArbitratorServiceKey.Instance);
+            ArbitratorServiceKey.RequestComponents);
 
         if (behaviors.Length == 0)
         {
@@ -70,7 +70,7 @@ internal sealed class RequestInvoker<TRequest, TResponse> : RequestInvoker<TResp
         {
             behaviors[index] = (IPipelineBehavior<TRequest, TResponse>)services.GetRequiredKeyedService(
                 _behaviorTypes[index],
-                ArbitratorServiceKey.Instance);
+                ArbitratorServiceKey.RequestComponents);
         }
 
         return behaviors;

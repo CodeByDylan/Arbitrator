@@ -10,8 +10,9 @@ namespace Arbitrator;
 /// <remarks>
 /// Each call either completes entirely or changes nothing. Behaviors run in the order they are registered across
 /// all <c>AddArbitrator</c> calls on a service collection: the first registered behavior is the outermost. The order
-/// of handler registrations relative to behavior registrations does not matter. Handlers and behaviors are
-/// transient.
+/// of handler registrations relative to behavior registrations does not matter. Notification handlers run in the
+/// order they are registered across all <c>AddArbitrator</c> calls. Handlers, notification handlers, and behaviors
+/// are transient.
 /// </remarks>
 public sealed class ArbitratorBuilder
 {
@@ -41,7 +42,7 @@ public sealed class ArbitratorBuilder
     /// The handler type is abstract, implements no handler contract, is already registered, handles an abstract
     /// request type or a request type with more than one request contract, handles a request type that already has a
     /// handler, or makes a behavior run twice; or a service provider has attempted to resolve
-    /// <see cref="ISender"/>; or the service collection is read-only.
+    /// <see cref="ISender"/> or <see cref="IPublisher"/>; or the service collection is read-only.
     /// </exception>
     [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
     [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
@@ -64,8 +65,8 @@ public sealed class ArbitratorBuilder
     /// <returns>This builder.</returns>
     /// <exception cref="ArbitratorConfigurationException">
     /// The behavior type is abstract, implements no behavior contract, is already registered, or would run twice for
-    /// a request; or a service provider has attempted to resolve <see cref="ISender"/>; or the service collection is
-    /// read-only.
+    /// a request; or a service provider has attempted to resolve <see cref="ISender"/> or <see cref="IPublisher"/>; or
+    /// the service collection is read-only.
     /// </exception>
     public ArbitratorBuilder AddBehavior<
         [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] TBehavior>()
@@ -90,7 +91,8 @@ public sealed class ArbitratorBuilder
     /// </exception>
     /// <exception cref="ArbitratorConfigurationException">
     /// The type is not a suitable generic type definition, is already registered, or would run twice for a request;
-    /// or a service provider has attempted to resolve <see cref="ISender"/>; or the service collection is read-only.
+    /// or a service provider has attempted to resolve <see cref="ISender"/> or <see cref="IPublisher"/>; or the service
+    /// collection is read-only.
     /// </exception>
     [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
     [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
@@ -100,6 +102,29 @@ public sealed class ArbitratorBuilder
         ArgumentNullException.ThrowIfNull(openBehaviorType);
         EnsureServicesAreWritable();
         AddServices(_registry.RegisterOpenBehavior(openBehaviorType));
+        return this;
+    }
+
+    /// <summary>
+    /// Registers a notification handler for every notification contract it implements. For each notification type,
+    /// it runs after every handler registered before it.
+    /// </summary>
+    /// <typeparam name="THandler">
+    /// A concrete class implementing <see cref="INotificationHandler{TNotification}"/> one or more times.
+    /// </typeparam>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArbitratorConfigurationException">
+    /// The handler type is abstract, implements no notification handler contract, is already registered as a
+    /// notification handler, or handles an abstract notification type; or a service provider has attempted to
+    /// resolve <see cref="ISender"/> or <see cref="IPublisher"/>; or the service collection is read-only.
+    /// </exception>
+    [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
+    public ArbitratorBuilder AddNotificationHandler<
+        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] THandler>()
+        where THandler : class
+    {
+        EnsureServicesAreWritable();
+        AddServices(_registry.RegisterNotificationHandler(typeof(THandler)));
         return this;
     }
 

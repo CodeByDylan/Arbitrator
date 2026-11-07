@@ -1,4 +1,3 @@
-using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using Arbitrator.Dispatch;
 using Microsoft.Extensions.DependencyInjection;
@@ -6,8 +5,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Arbitrator.Registration;
 
 /// <summary>
-/// Collects the handler and behavior registrations of one service collection, validates them, and produces the
-/// dispatch table once registration is complete.
+/// Collects the handler, behavior, and notification handler registrations of one service collection, validates
+/// them, and produces the dispatch maps once registration is complete.
 /// </summary>
 /// <remarks>
 /// Each registration either completes entirely or changes nothing. Building the dispatch table freezes the registry.
@@ -16,17 +15,16 @@ internal sealed class ArbitratorRegistry
 {
     private readonly Lock _gate = new();
     private readonly WeakReference<IServiceCollection> _owner;
-    private readonly RegisteredPipelines _pipelines;
-    private readonly RegisteredBehaviors _behaviors;
+    private readonly Registrations _registrations;
     private bool _isFrozen;
-    private FrozenDictionary<Type, RequestInvoker>? _invokersByRequestType;
+    private DispatchMaps? _dispatchMaps;
 
     /// <summary>
     /// Creates an empty registry for a service collection.
     /// </summary>
     /// <param name="owner">The service collection the registry belongs to.</param>
     public ArbitratorRegistry(IServiceCollection owner)
-        : this(owner, new RegisteredPipelines(), new RegisteredBehaviors())
+        : this(owner, new Registrations())
     {
     }
 
@@ -34,14 +32,22 @@ internal sealed class ArbitratorRegistry
     /// Creates a registry for a service collection from existing registrations.
     /// </summary>
     /// <param name="owner">The service collection the registry belongs to.</param>
-    /// <param name="pipelines">The registered pipelines.</param>
-    /// <param name="behaviors">The registered behaviors.</param>
-    private ArbitratorRegistry(IServiceCollection owner, RegisteredPipelines pipelines, RegisteredBehaviors behaviors)
+    /// <param name="registrations">The existing registrations.</param>
+    private ArbitratorRegistry(IServiceCollection owner, Registrations registrations)
     {
         _owner = new WeakReference<IServiceCollection>(owner);
-        _pipelines = pipelines;
-        _behaviors = behaviors;
+        _registrations = registrations;
     }
+
+    /// <summary>
+    /// Gets the registered request pipelines.
+    /// </summary>
+    private RegisteredPipelines Pipelines => _registrations.Pipelines;
+
+    /// <summary>
+    /// Gets the registered behaviors.
+    /// </summary>
+    private RegisteredBehaviors Behaviors => _registrations.Behaviors;
 
     /// <summary>
     /// Determines whether the registry belongs to a service collection, rather than having been copied into it
@@ -63,7 +69,7 @@ internal sealed class ArbitratorRegistry
     {
         lock (_gate)
         {
-            return new ArbitratorRegistry(owner, _pipelines.Copy(), _behaviors.Copy());
+            return new ArbitratorRegistry(owner, _registrations.Copy());
         }
     }
 
@@ -81,13 +87,17 @@ internal sealed class ArbitratorRegistry
         lock (_gate)
         {
             EnsureNotFrozen();
-            _pipelines.EnsureHandlerTypeIsNew(handlerType);
+            Pipelines.EnsureHandlerTypeIsNew(handlerType);
             IReadOnlyList<HandlerContract> contracts = HandlerTypeInspector.GetContracts(handlerType);
-            _pipelines.EnsureRequestTypesHaveNoHandler(contracts);
-            PipelinePlan[] plans = [.. contracts.Select(PlanPipeline)];
+            Pipelines.EnsureRequestTypesHaveNoHandler(contracts);
+            PipelinePlan[] plans = [.. contracts.Select(_registrations.PlanPipeline)];
 
-            _pipelines.AddRange(plans);
-            return [ComponentDescriptors.Create(handlerType), .. plans.SelectMany(CreateOpenBehaviorDescriptors)];
+            Pipelines.AddRange(plans);
+            return
+            [
+                ComponentDescriptors.ForRequestComponent(handlerType),
+                .. plans.SelectMany(CreateOpenBehaviorDescriptors),
+            ];
         }
     }
 
@@ -103,12 +113,12 @@ internal sealed class ArbitratorRegistry
         lock (_gate)
         {
             EnsureNotFrozen();
-            _behaviors.EnsureTypeIsNew(behaviorType);
+            Behaviors.EnsureTypeIsNew(behaviorType);
             ClosedBehaviorRegistration registration =
-                BehaviorTypeInspector.InspectClosed(behaviorType, _behaviors.NextPosition);
+                BehaviorTypeInspector.InspectClosed(behaviorType, Behaviors.NextPosition);
 
-            AppendBehavior(registration, _pipelines.PlaceClosedBehavior(registration));
-            return [ComponentDescriptors.Create(behaviorType)];
+            _registrations.AppendBehavior(registration, Pipelines.PlaceClosedBehavior(registration));
+            return [ComponentDescriptors.ForRequestComponent(behaviorType)];
         }
     }
 
@@ -126,31 +136,56 @@ internal sealed class ArbitratorRegistry
         lock (_gate)
         {
             EnsureNotFrozen();
-            _behaviors.EnsureTypeIsNew(behaviorType);
+            Behaviors.EnsureTypeIsNew(behaviorType);
             OpenBehaviorRegistration registration =
-                BehaviorTypeInspector.InspectOpen(behaviorType, _behaviors.NextPosition);
-            List<BehaviorPlacement> placements = _pipelines.PlaceOpenBehavior(registration);
+                BehaviorTypeInspector.InspectOpen(behaviorType, Behaviors.NextPosition);
+            List<BehaviorPlacement> placements = Pipelines.PlaceOpenBehavior(registration);
 
-            AppendBehavior(registration, placements);
-            return [.. placements.Select(placement => ComponentDescriptors.Create(placement.Behavior.ClosedType))];
+            _registrations.AppendBehavior(registration, placements);
+            return
+            [
+                .. placements.Select(
+                    placement => ComponentDescriptors.ForRequestComponent(placement.Behavior.ClosedType)),
+            ];
         }
     }
 
     /// <summary>
-    /// Freezes the registry and returns the invoker for each registered request type.
+    /// Registers a notification handler type for every notification contract it implements, after every notification
+    /// handler registered so far.
     /// </summary>
-    /// <returns>The invokers, keyed by request type.</returns>
+    /// <param name="handlerType">The notification handler type.</param>
+    /// <returns>The descriptor for the handler.</returns>
+    /// <exception cref="ArbitratorConfigurationException">The registration is invalid.</exception>
+    [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
+    public IReadOnlyList<ServiceDescriptor> RegisterNotificationHandler(
+        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type handlerType)
+    {
+        lock (_gate)
+        {
+            EnsureNotFrozen();
+            _registrations.NotificationHandlers.EnsureHandlerTypeIsNew(handlerType);
+            IReadOnlyList<NotificationHandlerContract> contracts =
+                NotificationHandlerTypeInspector.GetContracts(handlerType);
+
+            _registrations.NotificationHandlers.Add(handlerType, contracts);
+            return [ComponentDescriptors.ForNotificationHandler(handlerType)];
+        }
+    }
+
+    /// <summary>
+    /// Freezes the registry and returns the invokers for every registered request and notification type.
+    /// </summary>
+    /// <returns>The request and notification invokers.</returns>
     /// <exception cref="ArbitratorConfigurationException">
     /// A closed behavior applies to no registered request.
     /// </exception>
-    public FrozenDictionary<Type, RequestInvoker> Freeze()
+    public DispatchMaps Freeze()
     {
         lock (_gate)
         {
             _isFrozen = true;
-            _pipelines.EnsureEveryClosedBehaviorApplies(_behaviors.ClosedRegistrations);
-
-            return _invokersByRequestType ??= _pipelines.CreateInvokers();
+            return _dispatchMaps ??= _registrations.CreateDispatchMaps();
         }
     }
 
@@ -167,26 +202,6 @@ internal sealed class ArbitratorRegistry
     }
 
     /// <summary>
-    /// Plans the pipeline of a new handler contract from the behaviors registered so far.
-    /// </summary>
-    /// <param name="contract">The handler contract.</param>
-    /// <returns>The pipeline plan.</returns>
-    /// <exception cref="ArbitratorConfigurationException">A behavior would run twice in the pipeline.</exception>
-    [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
-    [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
-    private PipelinePlan PlanPipeline(HandlerContract contract)
-    {
-        var plan = new PipelinePlan(contract);
-
-        foreach (PlannedBehavior behavior in _behaviors.PlanFor(contract))
-        {
-            plan.Append(behavior);
-        }
-
-        return plan;
-    }
-
-    /// <summary>
     /// Creates the descriptors for the closed types that open behaviors contribute to a pipeline.
     /// </summary>
     /// <param name="plan">The pipeline plan.</param>
@@ -196,30 +211,6 @@ internal sealed class ArbitratorRegistry
     {
         return plan.Behaviors
             .Where(behavior => behavior.Registration is OpenBehaviorRegistration)
-            .Select(behavior => ComponentDescriptors.Create(behavior.ClosedType));
-    }
-
-    /// <summary>
-    /// Records a behavior registration and appends it to the pipelines it applies to, after verifying that no
-    /// pipeline would run the same closed behavior type twice.
-    /// </summary>
-    /// <param name="registration">The behavior registration.</param>
-    /// <param name="placements">The pipelines the behavior applies to.</param>
-    /// <exception cref="ArbitratorConfigurationException">
-    /// A pipeline would run a closed behavior type twice.
-    /// </exception>
-    private void AppendBehavior(BehaviorRegistration registration, IReadOnlyList<BehaviorPlacement> placements)
-    {
-        foreach (BehaviorPlacement placement in placements)
-        {
-            placement.Plan.EnsureCanAppend(placement.Behavior);
-        }
-
-        _behaviors.Add(registration);
-
-        foreach (BehaviorPlacement placement in placements)
-        {
-            placement.Plan.Append(placement.Behavior);
-        }
+            .Select(behavior => ComponentDescriptors.ForRequestComponent(behavior.ClosedType));
     }
 }
