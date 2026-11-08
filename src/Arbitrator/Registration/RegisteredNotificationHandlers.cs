@@ -53,6 +53,15 @@ internal sealed class RegisteredNotificationHandlers
     }
 
     /// <summary>
+    /// Describes every notification type that has handlers, in no particular order.
+    /// </summary>
+    /// <returns>One description per notification type.</returns>
+    public IEnumerable<NotificationRegistration> Describe()
+    {
+        return _plansByNotificationType.Values.Select(plan => plan.Describe());
+    }
+
+    /// <summary>
     /// Creates the invoker for every notification type that has handlers.
     /// </summary>
     /// <returns>The invokers, keyed by notification type.</returns>

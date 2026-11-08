@@ -55,7 +55,9 @@ The contracts live in the `Arbitrator` namespace: `IRequest<TResponse>`, `IReque
 TResponse>`, `IRequestHandler<TRequest>`, `IPipelineBehavior<TRequest, TResponse>`, `RequestContinuation<TResponse>`,
 `IStreamRequest<TItem>`, `IStreamRequestHandler<TRequest, TItem>`, `IStreamPipelineBehavior<TRequest, TItem>`,
 `StreamContinuation<TItem>`, `ISender`, `INotification`, `INotificationHandler<TNotification>`, `IPublisher`, `Unit`,
-and `ArbitratorConfigurationException`. Their shape follows these rules:
+and `ArbitratorConfigurationException`. The registration description (§5.6) adds `ArbitratorRegistrations`,
+`RequestRegistration`, and `NotificationRegistration`, which are read-only data. The contracts' shape follows these
+rules:
 
 - **Async naming and `Task`.** Methods are `SendAsync`, `StreamAsync`, `PublishAsync`, and `HandleAsync`, and return
   `Task` or `Task<TResponse>`, never `ValueTask`. The stream contracts return `IAsyncEnumerable<TItem>` instead.
@@ -307,6 +309,7 @@ The library builds with `IsAotCompatible`, no trimming or AOT analyzer warnings,
 | --- | --- | --- |
 | `ISender` | Scoped | Unkeyed. The application may inject it anywhere a scoped service is valid |
 | `IPublisher` | Scoped | Unkeyed, like `ISender` |
+| `ArbitratorRegistrations` | Singleton | Unkeyed. Describes the registrations of the provider (§5.6) |
 | Arbitrator's internal registry and dispatch table | Singleton | Internal types only |
 | Handlers, including stream handlers | Transient | Keyed with a private key, registered as their implementation type, one descriptor per handler type |
 | Closed behaviors of either kind | Transient | Keyed, registered as their implementation type |
@@ -390,10 +393,38 @@ The DI container owns the disposal of services, and Arbitrator never calls `Disp
 | **Container validation** (`ValidateOnBuild`, `ValidateScopes`) | Unresolvable constructor dependencies of every handler, notification handler, and behavior instantiation that applies to a registered request, because all of them are closed keyed descriptors. Singletons that depend on `ISender` or `IPublisher`. Lifetime violations inside application services | Exceptions thrown by constructors. Arbitrator's own cross-registration rules |
 | **First `ISender` or `IPublisher` resolution** in a provider | Closed behaviors that match no registered handler contract. Handlers and behaviors registered after the provider was built | Requests that are never registered |
 | **Dispatch**, or the first `MoveNextAsync` of a stream read | Null request or notification. A request type with no handler, including derived types of handled requests. Constructor exceptions. A continuation invoked twice, or its stream read twice. Null `Task` or stream results | n/a |
-| **Never** | Arbitrator can't prove that every request type in the application has a handler. It doesn't check that handlers honor cancellation, or that a non-nullable `TResponse` is actually non-null | |
+| **Never** | Arbitrator can't prove that every request type in the application has a handler; applications can check it with `ArbitratorRegistrations` (§5.6). It doesn't check that handlers honor cancellation, or that a non-nullable `TResponse` is actually non-null | |
 
 **Recommended application-side test:** build the real container with `ValidateOnBuild` and `ValidateScopes` enabled,
-create a scope, and resolve `ISender`. Together these cover every stage before dispatch.
+create a scope, and resolve `ISender`. Together these cover every stage before dispatch. Then compare
+`ArbitratorRegistrations.Requests` with the request types your assemblies define, so a request without a handler fails
+the test instead of the first send.
+
+### 5.6 Inspecting registrations
+
+`ArbitratorRegistrations` describes what one service provider dispatches.
+
+- **Resolution.** It's an unkeyed singleton, added by the first `AddArbitrator` call. It resolves from the root
+  provider, including with `ValidateScopes` enabled, and from any scope, as the same instance. Providers built from
+  one collection return the same instance.
+- **Freezing.** Resolving it builds the dispatch table, exactly as the first resolution of `ISender` or `IPublisher`
+  does: the registrations freeze, and the same checks run and fail with the same exceptions. `ValidateOnBuild` doesn't
+  resolve it, so building a provider never freezes anything.
+- **`Requests`.** One `RequestRegistration` per request type with a handler, including stream request types:
+  - `RequestType`: the exact type dispatch selects the entry for
+  - `ResponseType`: the `TResponse` of `IRequest<TResponse>`, `Unit` for `IRequest`, or the `TItem` of
+    `IStreamRequest<TItem>`
+  - `IsStream`, and `HandlerType`
+  - `BehaviorTypes`: the closed behavior types dispatch runs for the request, outermost first. Open behaviors appear
+    as the instantiation that runs
+- **`Notifications`.** One `NotificationRegistration` per notification type with at least one handler, with its
+  `HandlerTypes` in run order.
+- **Order.** Both lists are sorted by the ordinal order of `Type.FullName`. Within an entry, types keep dispatch order.
+- **Read-only.** The lists are immutable: changing one through a mutable interface such as `IList<T>` throws
+  `NotSupportedException`. The types have no public constructors and no value equality. Reading the description
+  constructs no handler or behavior.
+- **Not for clients.** Like exception messages, it names the application's types, so it's for tests and diagnostics,
+  not for responses.
 
 ## 6. Behavioral contract
 
@@ -458,6 +489,12 @@ passes values or exceptions through.
 | 54 | An exception while a stream is produced | The same exception instance reaches each enclosing behavior and the caller. Items already yielded stay delivered | Forwarded |
 | 55 | The caller stops reading early | The outermost component's enumerator is disposed and no further item is requested. Arbitrator disposes no services | Arbitrator |
 | 56 | Activation failure of a stream component | DI's exception propagates unwrapped from the first `MoveNextAsync`, before any component runs | Forwarded |
+| 57 | Resolving `ArbitratorRegistrations` | A singleton, from the root provider or any scope, describing what that provider dispatches | Arbitrator |
+| 58 | Resolving `ArbitratorRegistrations` before `ISender` | The registrations freeze, and the checks of the first `ISender` or `IPublisher` resolution run, failing with the same exceptions | Arbitrator |
+| 59 | Request entries | One per request type with a handler: request type, response or item type (`Unit` for `IRequest`), stream flag, handler type, and the closed behavior types that run, outermost first | Arbitrator |
+| 60 | Notification entries | One per notification type with handlers, listing them in run order | Arbitrator |
+| 61 | Order of the entries | Both lists are sorted by ordinal full type name | Arbitrator |
+| 62 | Changing or reading the description | The lists are immutable, and reading them constructs no handler or behavior | Arbitrator |
 
 **Example of token substitution (row 20):**
 

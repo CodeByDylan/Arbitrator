@@ -44,6 +44,11 @@ public sealed class TestHost : IAsyncDisposable
     public IPublisher Publisher => Scope.ServiceProvider.GetRequiredService<IPublisher>();
 
     /// <summary>
+    /// Gets the registration description, resolved from the root provider.
+    /// </summary>
+    public ArbitratorRegistrations Registrations => Provider.GetRequiredService<ArbitratorRegistrations>();
+
+    /// <summary>
     /// Gets the journal shared by the handlers and behaviors of this host.
     /// </summary>
     public Journal Journal => Provider.GetRequiredService<Journal>();

@@ -190,9 +190,10 @@ internal sealed class ArbitratorRegistry
     }
 
     /// <summary>
-    /// Freezes the registry and returns the invokers for every registered request and notification type.
+    /// Freezes the registry and returns the invokers for every registered request and notification type, with their
+    /// description.
     /// </summary>
-    /// <returns>The request and notification invokers.</returns>
+    /// <returns>The request and notification invokers, and their description.</returns>
     /// <exception cref="ArbitratorConfigurationException">
     /// A closed behavior applies to no registered request.
     /// </exception>

@@ -18,9 +18,10 @@ There is no `InternalsVisibleTo`: tests use only the public API.
 
 ## Registration
 
-1. **The first `AddArbitrator` call on a service collection** adds four descriptors: the `ArbitratorRegistry`
-   instance as a singleton, the `DispatchTable` as a singleton built by a factory from the registry, and the scoped
-   `ISender` and `IPublisher` implementations.
+1. **The first `AddArbitrator` call on a service collection** adds five descriptors: the `ArbitratorRegistry`
+   instance as a singleton, the `DispatchTable` as a singleton built by a factory from the registry, the public
+   `ArbitratorRegistrations` as a singleton taken from the dispatch table, and the scoped `ISender` and `IPublisher`
+   implementations.
 2. **Later calls** find the registry by its descriptor and add to it. A registry found in a collection it doesn't own
    came from a copied collection, so it is copied and the copy replaces it.
 3. **Each builder call** validates the type, records it in the registry's `Registrations`, and adds keyed transient
@@ -55,7 +56,9 @@ The `DispatchTable` singleton is created the first time a provider resolves `ISe
    the applicable behavior types in registration order, and one `NotificationInvoker<TNotification>` per notification
    type, holding its ordered handler types. A pipeline invoker is a `RequestInvoker<TRequest, TResponse>` or a
    `StreamInvoker<TRequest, TItem>`, chosen by the contract's kind. Both maps are `FrozenDictionary` instances keyed
-   by the request or notification type.
+   by the request or notification type. In the same call, each pipeline and notification plan describes itself, and
+   the descriptions become the public `ArbitratorRegistrations`, which the dispatch table exposes. Because both come
+   from the same frozen plans, the description always matches what dispatch runs.
 4. Through `IServiceProviderIsKeyedService`, the table checks that the provider can resolve every type the invokers
    refer to. A type is missing when it was registered after the provider was built, because MS.DI doesn't make a
    collection read-only when it builds a provider.
@@ -120,7 +123,8 @@ call and forwards it. The guards act only when a continuation is invoked or its 
 | Data | Where | Built | Mutability |
 | --- | --- | --- | --- |
 | Registrations and the descriptors already emitted | `ArbitratorRegistry`, a singleton instance in the `IServiceCollection` | On each builder call | Changes until frozen, then rejects changes |
-| Request and notification invokers | `DispatchTable`, one per root provider | On the first `ISender` or `IPublisher` resolution in that provider | Immutable |
+| Request and notification invokers | `DispatchTable`, one per root provider | On the first `ISender`, `IPublisher`, or `ArbitratorRegistrations` resolution in that provider | Immutable |
+| The registration description | `DispatchMaps`, cached by the registry and shared by every provider built from the collection | When the registry freezes | Immutable |
 
 Nothing else is cached: no handler or behavior instances, no providers or scopes beyond the scoped `Sender` and
 `Publisher` holding their own scope's provider, and no requests, responses, tokens, or continuations. The only statics

@@ -17,6 +17,8 @@ is small enough to read in one sitting. `docs/contract.md`, in the source reposi
 - **Notifications.** Zero or more handlers per notification type, run one after another in registration order.
 - **Explicit registration** with actionable configuration errors, plus opt-in assembly scanning for handlers. Behaviors
   are always registered explicitly.
+- **Testable configuration.** `ArbitratorRegistrations` lists every handler and pipeline, so a test can prove that
+  every request type has a handler.
 - **The caller's scope.** Arbitrator never creates a scope, caches an instance, or disposes a service.
 - **Unwrapped exceptions.** Exceptions reach the caller as the same instance, and cancellation is checked once and
   then forwarded.
@@ -271,6 +273,44 @@ builder.Services.AddArbitrator(arbitrator => arbitrator
   excludes all of them, or an assembly whose types (or a handler's attributes) can't be loaded is a configuration error
   that names the assembly.
 
+## Testing your configuration
+
+Arbitrator validates registrations early, but it can't know whether every request type you define has a handler. A
+request without one fails only when it's sent. `ArbitratorRegistrations` describes what a built service provider
+dispatches, so a test can catch that first:
+
+```csharp
+[Test]
+public async Task Every_request_type_has_a_handler()
+{
+    await using var factory = new WebApplicationFactory<Program>();
+    var registrations = factory.Services.GetRequiredService<ArbitratorRegistrations>();
+
+    HashSet<Type> handled = [.. registrations.Requests.Select(request => request.RequestType)];
+    Type[] unhandled =
+    [
+        .. typeof(GetCustomer).Assembly.GetTypes()
+            .Where(type => type is { IsAbstract: false, IsGenericTypeDefinition: false })
+            .Where(type => type.GetInterfaces().Any(contract => contract.IsGenericType
+                && (contract.GetGenericTypeDefinition() == typeof(IRequest<>)
+                    || contract.GetGenericTypeDefinition() == typeof(IStreamRequest<>))))
+            .Where(type => !handled.Contains(type)),
+    ];
+
+    await Assert.That(unhandled).IsEmpty();
+}
+```
+
+- **What it describes.** `Requests` has one entry per request type with a handler: the request, response, and handler
+  types, whether it's a stream, and `BehaviorTypes`, the behaviors that run for it, outermost first. `Notifications`
+  lists each notification type's handlers in run order. Both lists are sorted by full type name.
+- **Assert your pipelines too.** For example, check that a transaction behavior appears in the `BehaviorTypes` of every
+  command.
+- **It freezes the registrations.** Resolving it is like resolving `ISender` for the first time: registrations can't
+  change afterwards, and configuration errors surface here. It's a singleton, so resolve it from the root provider; no
+  scope is needed.
+- **Keep it in tests.** It names your application's types, so don't return it from an endpoint.
+
 ## The contract in brief
 
 | Situation | Behavior |
@@ -293,6 +333,7 @@ builder.Services.AddArbitrator(arbitrator => arbitrator
 | Disposal | The scope disposes handlers and behaviors when it ends |
 | Registration after the provider was built | `ArbitratorConfigurationException` when that provider resolves `ISender` or `IPublisher` |
 | Registration on a read-only collection | `ArbitratorConfigurationException`, and nothing is registered |
+| Resolving `ArbitratorRegistrations` | Registrations freeze, and configuration errors surface, as on the first `ISender` resolution |
 | A scanned type is invalid or already registered | `ArbitratorConfigurationException`, and the scan registers nothing |
 
 Turn on `ValidateOnBuild` and `ValidateScopes` for your container. Container validation then checks the dependencies

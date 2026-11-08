@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using Arbitrator.Dispatch;
 
@@ -98,8 +99,17 @@ internal sealed class PipelinePlan
     /// Creates the invoker that runs the planned pipeline.
     /// </summary>
     /// <returns>The invoker.</returns>
-    public PipelineInvoker CreateInvoker()
-    {
-        return _invokerTemplate.WithBehaviors([.. _behaviors.Select(behavior => behavior.ClosedType)]);
-    }
+    public PipelineInvoker CreateInvoker() => _invokerTemplate.WithBehaviors(ClosedBehaviorTypes());
+
+    /// <summary>
+    /// Describes the planned handler contract and pipeline.
+    /// </summary>
+    /// <returns>The description.</returns>
+    public RequestRegistration Describe() => new(Contract, ClosedBehaviorTypes());
+
+    /// <summary>
+    /// Lists the closed behavior types that run, outermost first.
+    /// </summary>
+    /// <returns>The closed behavior types.</returns>
+    private ImmutableArray<Type> ClosedBehaviorTypes() => [.. _behaviors.Select(behavior => behavior.ClosedType)];
 }

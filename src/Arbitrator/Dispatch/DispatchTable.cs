@@ -19,7 +19,13 @@ internal sealed class DispatchTable
     {
         _invokersByRequestType = maps.PipelineInvokers;
         _invokersByNotificationType = maps.NotificationInvokers;
+        Registrations = maps.Registrations;
     }
+
+    /// <summary>
+    /// Gets the public description of the registrations this table dispatches.
+    /// </summary>
+    public ArbitratorRegistrations Registrations { get; }
 
     /// <summary>
     /// Creates the dispatch table of one service provider after verifying that the provider can resolve every

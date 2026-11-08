@@ -17,11 +17,12 @@ public static class ArbitratorServiceCollectionExtensions
         /// </summary>
         /// <remarks>
         /// <see cref="ISender"/> and <see cref="IPublisher"/> are registered as scoped services: resolve them from the
-        /// scope whose services the handlers and behaviors should use. The method may be called more than once on the
-        /// same collection; every call adds to the same registrations, and behavior and notification handler order
-        /// follows the order of registration calls. A collection whose descriptors were copied from another
-        /// collection receives its own registrations on its first call, so later registrations on either collection
-        /// do not affect the other.
+        /// scope whose services the handlers and behaviors should use. <see cref="ArbitratorRegistrations"/> is
+        /// registered as a singleton that describes what a service provider dispatches. The method may be called more
+        /// than once on the same collection; every call adds to the same registrations, and behavior and notification
+        /// handler order follows the order of registration calls. A collection whose descriptors were copied from
+        /// another collection receives its own registrations on its first call, so later registrations on either
+        /// collection do not affect the other.
         /// </remarks>
         /// <param name="configure">Registers handlers and behaviors.</param>
         /// <returns>The service collection.</returns>
@@ -72,7 +73,8 @@ public static class ArbitratorServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Adds the registry, the dispatch table, and the scoped sender and publisher on the first call.
+    /// Adds the registry, the dispatch table, the registration description, and the scoped sender and publisher on
+    /// the first call.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The new registry.</returns>
@@ -84,6 +86,7 @@ public static class ArbitratorServiceCollectionExtensions
         services.AddSingleton(static provider => DispatchTable.Create(
             provider.GetRequiredService<ArbitratorRegistry>().Freeze(),
             provider.GetService<IServiceProviderIsKeyedService>()));
+        services.AddSingleton(static provider => provider.GetRequiredService<DispatchTable>().Registrations);
         services.AddScoped<ISender, Sender>();
         services.AddScoped<IPublisher, Publisher>();
 

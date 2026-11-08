@@ -57,4 +57,10 @@ internal sealed class NotificationPlan
     /// </summary>
     /// <returns>The invoker.</returns>
     public NotificationInvoker CreateInvoker() => _invokerTemplate.WithHandlers([.. _handlerTypes]);
+
+    /// <summary>
+    /// Describes the notification type and its planned handlers.
+    /// </summary>
+    /// <returns>The description.</returns>
+    public NotificationRegistration Describe() => new(NotificationType, [.. _handlerTypes]);
 }

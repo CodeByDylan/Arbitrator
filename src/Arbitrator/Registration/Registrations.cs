@@ -55,16 +55,19 @@ internal sealed class Registrations
     public Registrations Copy() => new(Pipelines.Copy(), Behaviors.Copy(), NotificationHandlers.Copy());
 
     /// <summary>
-    /// Verifies the registrations as a whole and creates the invokers the dispatch table uses.
+    /// Verifies the registrations as a whole and creates the invokers the dispatch table uses, together with their
+    /// public description.
     /// </summary>
-    /// <returns>The request and notification invokers.</returns>
+    /// <returns>The request and notification invokers, and their description.</returns>
     /// <exception cref="ArbitratorConfigurationException">
     /// A closed behavior applies to no registered request.
     /// </exception>
     public DispatchMaps CreateDispatchMaps()
     {
         Pipelines.EnsureEveryClosedBehaviorApplies(Behaviors.ClosedRegistrations);
-        return new DispatchMaps(Pipelines.CreateInvokers(), NotificationHandlers.CreateInvokers());
+        var description = new ArbitratorRegistrations(Pipelines.Describe(), NotificationHandlers.Describe());
+
+        return new DispatchMaps(Pipelines.CreateInvokers(), NotificationHandlers.CreateInvokers(), description);
     }
 
     /// <summary>
