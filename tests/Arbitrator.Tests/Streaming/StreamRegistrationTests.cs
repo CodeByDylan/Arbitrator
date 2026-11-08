@@ -68,8 +68,8 @@ public sealed class StreamRegistrationTests
         ArbitratorConfigurationException exception = Expect.ThrowsExactly<ArbitratorConfigurationException>(
             () => services.AddArbitrator(arbitrator => arbitrator.AddOpenBehavior(typeof(BothKindsBehavior<,>))));
 
-        await Assert.That(exception.Message).Contains("exactly one of IPipelineBehavior<TRequest, TResponse> or "
-            + "IStreamPipelineBehavior<TRequest, TItem>");
+        await Assert.That(exception.Message)
+            .Contains("exactly one behavior contract using its type parameters in order");
     }
 
     [Test]

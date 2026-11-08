@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using Arbitrator.Dispatch;
 
@@ -7,10 +6,10 @@ namespace Arbitrator.Registration;
 /// <summary>
 /// The handler and ordered behaviors planned for one request type while registrations are still being added.
 /// </summary>
-internal sealed class PipelinePlan
+internal sealed class PipelinePlan : IBehaviorPlan
 {
     private readonly PipelineInvoker _invokerTemplate;
-    private readonly List<PlannedBehavior> _behaviors;
+    private readonly PlannedBehaviors _behaviors;
 
     /// <summary>
     /// Creates a plan with no behaviors for a handler contract.
@@ -20,7 +19,7 @@ internal sealed class PipelinePlan
     public PipelinePlan(HandlerContract contract)
     {
         Contract = contract;
-        _behaviors = [];
+        _behaviors = new PlannedBehaviors();
         _invokerTemplate = PipelineInvoker.CreateTemplate(
             contract.Kind,
             contract.RequestType,
@@ -36,7 +35,7 @@ internal sealed class PipelinePlan
     {
         Contract = source.Contract;
         _invokerTemplate = source._invokerTemplate;
-        _behaviors = [.. source._behaviors];
+        _behaviors = source._behaviors.Copy();
     }
 
     /// <summary>
@@ -44,23 +43,18 @@ internal sealed class PipelinePlan
     /// </summary>
     public HandlerContract Contract { get; }
 
-    /// <summary>
-    /// Gets the planned behaviors, outermost first.
-    /// </summary>
-    public IReadOnlyList<PlannedBehavior> Behaviors => _behaviors;
+    /// <inheritdoc/>
+    public IReadOnlyList<PlannedBehavior> Behaviors => _behaviors.Items;
 
-    /// <summary>
-    /// Verifies that a behavior can be added without its closed type running twice in the pipeline.
-    /// </summary>
-    /// <param name="candidate">The behavior to add.</param>
-    /// <exception cref="ArbitratorConfigurationException">The closed type is already in the pipeline.</exception>
+    /// <inheritdoc/>
+    public ArbitratorServiceKey BehaviorServiceKey => ArbitratorServiceKey.RequestComponents;
+
+    /// <inheritdoc/>
     public void EnsureCanAppend(PlannedBehavior candidate)
     {
-        PlannedBehavior? existing = _behaviors.Find(behavior => behavior.ClosedType == candidate.ClosedType);
-
-        if (existing is not null)
+        if (_behaviors.FindSameClosedType(candidate) is { } existing)
         {
-            throw RegistrationErrors.BehaviorWouldRunTwice(new BehaviorConflict(
+            throw BehaviorRegistrationErrors.BehaviorWouldRunTwice(new BehaviorConflict(
                 candidate.ClosedType,
                 Contract.RequestType,
                 existing.Registration,
@@ -68,26 +62,15 @@ internal sealed class PipelinePlan
         }
     }
 
-    /// <summary>
-    /// Adds a behavior as the innermost behavior of the pipeline.
-    /// </summary>
-    /// <param name="behavior">The behavior to add.</param>
-    /// <exception cref="ArbitratorConfigurationException">The closed type is already in the pipeline.</exception>
+    /// <inheritdoc/>
     public void Append(PlannedBehavior behavior)
     {
         EnsureCanAppend(behavior);
         _behaviors.Add(behavior);
     }
 
-    /// <summary>
-    /// Determines whether a registration contributes a behavior to the pipeline.
-    /// </summary>
-    /// <param name="registration">The behavior registration.</param>
-    /// <returns><see langword="true"/> when the registration is part of the pipeline.</returns>
-    public bool Contains(BehaviorRegistration registration)
-    {
-        return _behaviors.Exists(behavior => behavior.Registration == registration);
-    }
+    /// <inheritdoc/>
+    public bool Contains(BehaviorRegistration registration) => _behaviors.Contains(registration);
 
     /// <summary>
     /// Creates an independent copy of the plan, whose behaviors can change without affecting this plan.
@@ -99,17 +82,11 @@ internal sealed class PipelinePlan
     /// Creates the invoker that runs the planned pipeline.
     /// </summary>
     /// <returns>The invoker.</returns>
-    public PipelineInvoker CreateInvoker() => _invokerTemplate.WithBehaviors(ClosedBehaviorTypes());
+    public PipelineInvoker CreateInvoker() => _invokerTemplate.WithBehaviors(_behaviors.ClosedTypes());
 
     /// <summary>
     /// Describes the planned handler contract and pipeline.
     /// </summary>
     /// <returns>The description.</returns>
-    public RequestRegistration Describe() => new(Contract, ClosedBehaviorTypes());
-
-    /// <summary>
-    /// Lists the closed behavior types that run, outermost first.
-    /// </summary>
-    /// <returns>The closed behavior types.</returns>
-    private ImmutableArray<Type> ClosedBehaviorTypes() => [.. _behaviors.Select(behavior => behavior.ClosedType)];
+    public RequestRegistration Describe() => new(Contract, _behaviors.ClosedTypes());
 }

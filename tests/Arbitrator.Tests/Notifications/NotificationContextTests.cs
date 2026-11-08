@@ -1,10 +1,11 @@
 using Arbitrator.Tests.Support;
+using TUnit.Assertions.Enums;
 
 namespace Arbitrator.Tests.Notifications;
 
 /// <summary>
-/// Specifies how publishing uses the caller's synchronization context: every handler starts on it, and nothing
-/// returns to it after the last handler.
+/// Specifies how publishing uses the caller's synchronization context: every handler, or its outermost behavior,
+/// starts on it, and nothing returns to it after the last handler.
 /// </summary>
 public sealed class NotificationContextTests
 {
@@ -33,6 +34,25 @@ public sealed class NotificationContextTests
 
         await Assert.That(isCompleted).IsTrue();
         await Expect.EntriesAsync(host.Journal, "completed in the background");
+    }
+
+    [Test]
+    public async Task Each_handlers_outermost_behavior_starts_on_the_callers_context()
+    {
+        await using TestHost host = TestHost.Create(arbitrator => arbitrator
+            .AddBehavior<ContextObservingBehavior>()
+            .AddNotificationHandler<ContextLeavingHandler>()
+            .AddNotificationHandler<FirstAnnouncementHandler>());
+        IPublisher publisher = host.Publisher;
+
+        await Task.Run(() => PublishOnContext(publisher, new MarkedSynchronizationContext()));
+
+        IEnumerable<string> observations =
+            host.Journal.Entries.Where(entry => entry.StartsWith("behavior", StringComparison.Ordinal));
+        await Assert.That(observations).IsEquivalentTo(
+            ["behavior on context: True", "behavior on context: True"],
+            CollectionOrdering.Matching);
+        await Assert.That(host.Journal.Entries).Contains("handler left the context: True");
     }
 
     private static bool IsOnMarkedContext() => MarkedSynchronizationContext.IsCurrent;
@@ -65,6 +85,28 @@ public sealed class NotificationContextTests
 
         callerThread.Start();
         return outcome.Task;
+    }
+
+    public sealed class ContextObservingBehavior(Journal journal) : INotificationBehavior<Announcement>
+    {
+        public Task HandleAsync(
+            Announcement notification,
+            Type handlerType,
+            NotificationContinuation next,
+            CancellationToken cancellationToken)
+        {
+            journal.Record($"behavior on context: {MarkedSynchronizationContext.IsCurrent}");
+            return next(cancellationToken);
+        }
+    }
+
+    public sealed class ContextLeavingHandler(Journal journal) : INotificationHandler<Announcement>
+    {
+        public async Task HandleAsync(Announcement notification, CancellationToken cancellationToken)
+        {
+            await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
+            journal.Record($"handler left the context: {!MarkedSynchronizationContext.IsCurrent}");
+        }
     }
 
     public sealed class NonPumpingSynchronizationContext : SynchronizationContext

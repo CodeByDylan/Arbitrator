@@ -25,20 +25,26 @@ There is no `InternalsVisibleTo`: tests use only the public API.
 2. **Later calls** find the registry by its descriptor and add to it. A registry found in a collection it doesn't own
    came from a copied collection, so it is copied and the copy replaces it.
 3. **Each builder call** validates the type, records it in the registry's `Registrations`, and adds keyed transient
-   descriptors. Request components use one key and notification handlers another (`ArbitratorServiceKey`).
-   Handlers and closed behaviors are registered as their implementation type. An open behavior is registered as one
-   closed instantiation per applicable handler contract.
+   descriptors. Request components, notification handlers, and notification behaviors each use their own key
+   (`ArbitratorServiceKey`). Handlers and closed behaviors are registered as their implementation type. An open
+   behavior is registered as one closed instantiation per applicable handler contract or notification type.
 4. **Pipeline kinds.** Every handler contract, closed-behavior contract, and open behavior records its `PipelineKind`:
    `Response` for the `IRequest<>` contracts and `Stream` for the `IStreamRequest<>` contracts. The kind holds the
    generic definitions of its request, handler, and behavior contracts, so the inspectors find both kinds in one pass,
    and a behavior applies only to contracts of its own kind. Both kinds share the request-type map, so "one handler
-   per request type" spans them.
-5. **Emission is incremental.** A new handler contract gets descriptors for every open behavior already registered
-   that applies to it, and a new open behavior gets one for every applicable contract already registered. That's why
-   the relative order of handler and behavior calls never matters. Applicability is computed once per (behavior,
-   contract) pair: `MakeGenericType` succeeding means the behavior applies, and a constraint violation means it
-   doesn't.
-6. **Scanning.** `HandlerAssemblyScanner` finds, sorts, and filters candidates outside the registry lock, because the
+   per request type" spans them. Notification behaviors are a third kind outside `PipelineKind`: a closed registration
+   lists the notification types it wraps, and open ones are `OpenNotificationBehaviorRegistration`. Both open kinds
+   derive from the `closed` record `OpenRegistration`, so every `switch` over registrations must handle each kind.
+5. **Plans.** `PipelinePlan` (one per request type) and `NotificationPlan` (one per notification type) both implement
+   `IBehaviorPlan`, so placement, the "would run twice" check, and descriptor creation serve both. Their shared list
+   logic lives in `PlannedBehaviors`. `RegisteredBehaviors` plans a new plan of either kind from the behaviors
+   registered so far.
+6. **Emission is incremental.** A new handler contract or notification type gets descriptors for every open behavior
+   already registered that applies to it, and a new open behavior gets one for every applicable contract or
+   notification type already registered. That's why the relative order of handler and behavior calls never matters.
+   Applicability is computed once per (behavior, contract) pair: `MakeGenericType` succeeding means the behavior
+   applies, and a constraint violation means it doesn't.
+7. **Scanning.** `HandlerAssemblyScanner` finds, sorts, and filters candidates outside the registry lock, because the
    filter is caller code. `ArbitratorRegistry` then registers the result into a copy of its `Registrations` under the
    lock, using the same per-type logic as explicit registration, and replaces its registrations with the copy only on
    success.
@@ -50,15 +56,16 @@ Arbitrator never builds a service provider during registration.
 The `DispatchTable` singleton is created the first time a provider resolves `ISender` or `IPublisher`:
 
 1. The registry is frozen. Any later builder call throws.
-2. Every closed behavior must apply to at least one registered handler contract. Because the singleton factory throws
-   otherwise, every later resolution fails the same way.
+2. Every closed behavior must apply to at least one registered handler contract or notification type with handlers.
+   Because the singleton factory throws otherwise, every later resolution fails the same way.
 3. `Registrations` produces `DispatchMaps`: one `PipelineInvoker` per handler contract, holding the handler type and
    the applicable behavior types in registration order, and one `NotificationInvoker<TNotification>` per notification
-   type, holding its ordered handler types. A pipeline invoker is a `RequestInvoker<TRequest, TResponse>` or a
-   `StreamInvoker<TRequest, TItem>`, chosen by the contract's kind. Both maps are `FrozenDictionary` instances keyed
-   by the request or notification type. In the same call, each pipeline and notification plan describes itself, and
-   the descriptions become the public `ArbitratorRegistrations`, which the dispatch table exposes. Because both come
-   from the same frozen plans, the description always matches what dispatch runs.
+   type, holding its ordered handler types and the behavior types that wrap each. A pipeline invoker is a
+   `RequestInvoker<TRequest, TResponse>` or a `StreamInvoker<TRequest, TItem>`, chosen by the contract's kind. Both
+   maps are `FrozenDictionary` instances keyed by the request or notification type. In the same call, each pipeline
+   and notification plan describes itself, and the descriptions become the public `ArbitratorRegistrations`, which the
+   dispatch table exposes. Because both come from the same frozen plans, the description always matches what dispatch
+   runs.
 4. Through `IServiceProviderIsKeyedService`, the table checks that the provider can resolve every type the invokers
    refer to. A type is missing when it was registered after the provider was built, because MS.DI doesn't make a
    collection read-only when it builds a provider.
@@ -117,6 +124,19 @@ the iterator reads it with the same token and yields each item.
 `GuardedContinuation`, and wraps the stream it returns in a `SingleReadStream`, which allows one `GetAsyncEnumerator`
 call and forwards it. The guards act only when a continuation is invoked or its stream is opened, never per item.
 `ComponentStreams` turns a null stream into an `InvalidOperationException`, as `ComponentTasks` does for tasks.
+
+## Publishing a notification
+
+`Publisher` checks for null, looks up the `NotificationInvoker`, and returns at once when there is none, so a
+notification without handlers resolves nothing. Otherwise it checks the token once and calls
+`NotificationInvoker<TNotification>.PublishAsync`.
+
+The invoker resolves, for each handler in run order, its behaviors outermost first and then the handler, so every
+handler call has its own behavior instances. Then, for each handler, it checks the token and calls the outermost
+component. With no behaviors, that is the handler. Otherwise `NotificationBehaviorContinuation` and
+`NotificationHandlerContinuation`, both `GuardedContinuation<TNotification, Task>`, chain the behaviors around the
+handler, and a `NotificationHandlerCall` carries the notification and the handler type to each behavior. The invoker
+awaits each chain on the caller's captured context, except the last, so that the next chain starts there.
 
 ## State and caching
 

@@ -60,11 +60,11 @@ internal sealed class Registrations
     /// </summary>
     /// <returns>The request and notification invokers, and their description.</returns>
     /// <exception cref="ArbitratorConfigurationException">
-    /// A closed behavior applies to no registered request.
+    /// A closed behavior applies to no registered request or notification.
     /// </exception>
     public DispatchMaps CreateDispatchMaps()
     {
-        Pipelines.EnsureEveryClosedBehaviorApplies(Behaviors.ClosedRegistrations);
+        EnsureEveryClosedBehaviorApplies();
         var description = new ArbitratorRegistrations(Pipelines.Describe(), NotificationHandlers.Describe());
 
         return new DispatchMaps(Pipelines.CreateInvokers(), NotificationHandlers.CreateInvokers(), description);
@@ -85,13 +85,13 @@ internal sealed class Registrations
         Pipelines.EnsureHandlerTypeIsNew(handlerType);
         IReadOnlyList<HandlerContract> contracts = HandlerTypeInspector.GetContracts(handlerType);
         Pipelines.EnsureRequestTypesHaveNoHandler(contracts);
-        PipelinePlan[] plans = [.. contracts.Select(PlanPipeline)];
+        PipelinePlan[] plans = [.. contracts.Select(Behaviors.PlanPipeline)];
 
         Pipelines.AddRange(plans);
         return
         [
             ComponentDescriptors.ForRequestComponent(handlerType),
-            .. plans.SelectMany(CreateOpenBehaviorDescriptors),
+            .. plans.SelectMany(ComponentDescriptors.ForOpenBehaviors),
         ];
     }
 
@@ -100,50 +100,82 @@ internal sealed class Registrations
     /// handler registered so far.
     /// </summary>
     /// <param name="handlerType">The notification handler type.</param>
-    /// <returns>The descriptor for the handler.</returns>
+    /// <returns>
+    /// The descriptors for the handler and for the open behaviors that now wrap the handlers of its notification types.
+    /// </returns>
     /// <exception cref="ArbitratorConfigurationException">The registration is invalid.</exception>
     [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
+    [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
     public IReadOnlyList<ServiceDescriptor> RegisterNotificationHandler(
         [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type handlerType)
     {
         NotificationHandlers.EnsureHandlerTypeIsNew(handlerType);
         IReadOnlyList<NotificationHandlerContract> contracts =
             NotificationHandlerTypeInspector.GetContracts(handlerType);
+        NotificationPlan[] newPlans =
+            [.. NotificationHandlers.FindUnplannedTypes(contracts).Select(Behaviors.PlanNotification)];
 
-        NotificationHandlers.Add(handlerType, contracts);
-        return [ComponentDescriptors.ForNotificationHandler(handlerType)];
+        NotificationHandlers.Add(handlerType, contracts, newPlans);
+        return
+        [
+            ComponentDescriptors.ForNotificationHandler(handlerType),
+            .. newPlans.SelectMany(ComponentDescriptors.ForOpenBehaviors),
+        ];
     }
 
     /// <summary>
-    /// Plans the pipeline of a new handler contract from the behaviors registered so far.
+    /// Registers a closed behavior at the next registration position, around every request and notification it
+    /// applies to.
     /// </summary>
-    /// <param name="contract">The handler contract.</param>
-    /// <returns>The pipeline plan.</returns>
-    /// <exception cref="ArbitratorConfigurationException">A behavior would run twice in the pipeline.</exception>
+    /// <param name="behaviorType">The closed behavior type.</param>
+    /// <returns>The descriptors for the behavior.</returns>
+    /// <exception cref="ArbitratorConfigurationException">The registration is invalid.</exception>
+    public IReadOnlyList<ServiceDescriptor> RegisterClosedBehavior(
+        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type behaviorType)
+    {
+        Behaviors.EnsureTypeIsNew(behaviorType);
+        ClosedBehaviorRegistration registration =
+            BehaviorTypeInspector.InspectClosed(behaviorType, Behaviors.NextPosition);
+
+        BehaviorPlacement[] placements =
+            [.. Pipelines.PlaceClosedBehavior(registration), .. NotificationHandlers.PlaceClosedBehavior(registration)];
+
+        AppendBehavior(registration, placements);
+        return ComponentDescriptors.ForClosedBehavior(behaviorType, registration);
+    }
+
+    /// <summary>
+    /// Registers an open behavior at the next registration position, around every registered request or notification
+    /// whose types satisfy its generic constraints.
+    /// </summary>
+    /// <param name="behaviorType">The generic type definition of the behavior.</param>
+    /// <returns>The descriptors for the closed behavior types that now apply.</returns>
+    /// <exception cref="ArbitratorConfigurationException">The registration is invalid.</exception>
     [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
     [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
-    public PipelinePlan PlanPipeline(HandlerContract contract)
+    public IReadOnlyList<ServiceDescriptor> RegisterOpenBehavior(
+        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type behaviorType)
     {
-        var plan = new PipelinePlan(contract);
-
-        foreach (PlannedBehavior behavior in Behaviors.PlanFor(contract))
+        Behaviors.EnsureTypeIsNew(behaviorType);
+        OpenRegistration registration = BehaviorTypeInspector.InspectOpen(behaviorType, Behaviors.NextPosition);
+        List<BehaviorPlacement> placements = registration switch
         {
-            plan.Append(behavior);
-        }
+            OpenBehaviorRegistration open => Pipelines.PlaceOpenBehavior(open),
+            OpenNotificationBehaviorRegistration open => NotificationHandlers.PlaceOpenBehavior(open),
+        };
 
-        return plan;
+        AppendBehavior(registration, placements);
+        return [.. placements.Select(ComponentDescriptors.ForPlacement)];
     }
 
     /// <summary>
-    /// Records a behavior registration and appends it to the pipelines it applies to, after verifying that no
-    /// pipeline would run the same closed behavior type twice.
+    /// Records a behavior registration and appends it to the plans it applies to, after verifying that no plan would
+    /// run the same closed behavior type twice.
     /// </summary>
     /// <param name="registration">The behavior registration.</param>
-    /// <param name="placements">The pipelines the behavior applies to.</param>
-    /// <exception cref="ArbitratorConfigurationException">
-    /// A pipeline would run a closed behavior type twice.
-    /// </exception>
-    public void AppendBehavior(BehaviorRegistration registration, IReadOnlyList<BehaviorPlacement> placements)
+    /// <param name="placements">The plans the behavior applies to.</param>
+    /// <exception cref="ArbitratorConfigurationException">A plan would run a closed behavior type twice.</exception>
+    private void AppendBehavior(BehaviorRegistration registration, IReadOnlyList<BehaviorPlacement> placements)
     {
         foreach (BehaviorPlacement placement in placements)
         {
@@ -159,15 +191,17 @@ internal sealed class Registrations
     }
 
     /// <summary>
-    /// Creates the descriptors for the closed types that open behaviors contribute to a pipeline.
+    /// Rejects closed behaviors that apply to no registered request and no notification with handlers.
     /// </summary>
-    /// <param name="plan">The pipeline plan.</param>
-    /// <returns>The descriptors.</returns>
-    [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
-    private static IEnumerable<ServiceDescriptor> CreateOpenBehaviorDescriptors(PipelinePlan plan)
+    /// <exception cref="ArbitratorConfigurationException">A closed behavior applies to nothing registered.</exception>
+    private void EnsureEveryClosedBehaviorApplies()
     {
-        return plan.Behaviors
-            .Where(behavior => behavior.Registration is OpenBehaviorRegistration)
-            .Select(behavior => ComponentDescriptors.ForRequestComponent(behavior.ClosedType));
+        foreach (ClosedBehaviorRegistration registration in Behaviors.ClosedRegistrations)
+        {
+            if (!Pipelines.Contains(registration) && !NotificationHandlers.Contains(registration))
+            {
+                throw BehaviorRegistrationErrors.ClosedBehaviorWithoutHandler(registration);
+            }
+        }
     }
 }

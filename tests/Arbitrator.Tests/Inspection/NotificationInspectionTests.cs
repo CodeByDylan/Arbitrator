@@ -55,6 +55,26 @@ public sealed class NotificationInspectionTests
             .IsEqualTo(typeof(PingAndAnnouncementHandler));
     }
 
+    [Test]
+    public async Task Behavior_types_are_the_notification_behaviors_that_wrap_each_handler_outermost_first()
+    {
+        await using TestHost host = TestHost.Create(arbitrator => arbitrator
+            .AddOpenBehavior(typeof(FirstNotificationBehavior<>))
+            .AddOpenBehavior(typeof(FirstBehavior<,>))
+            .AddOpenBehavior(typeof(SecondNotificationBehavior<>))
+            .AddNotificationHandler<FirstAnnouncementHandler>()
+            .AddHandler<PingHandler>());
+
+        ArbitratorRegistrations registrations = host.Registrations;
+
+        await Assert.That(registrations.Notifications.Single().BehaviorTypes).IsEquivalentTo(
+            [typeof(FirstNotificationBehavior<Announcement>), typeof(SecondNotificationBehavior<Announcement>)],
+            CollectionOrdering.Matching);
+        await Assert.That(registrations.Requests.Single().BehaviorTypes).IsEquivalentTo(
+            [typeof(FirstBehavior<Ping, Pong>)],
+            CollectionOrdering.Matching);
+    }
+
     public sealed record CustomerArchived : INotification;
 
     public sealed class AuditRecorder : INotificationHandler<Announcement>, INotificationHandler<CustomerArchived>

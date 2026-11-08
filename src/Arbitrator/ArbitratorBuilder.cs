@@ -62,14 +62,15 @@ public sealed class ArbitratorBuilder
     /// it implements.
     /// </summary>
     /// <typeparam name="TBehavior">
-    /// A concrete class implementing <see cref="IPipelineBehavior{TRequest, TResponse}"/> or
-    /// <see cref="IStreamPipelineBehavior{TRequest, TItem}"/> one or more times.
+    /// A concrete class implementing <see cref="IPipelineBehavior{TRequest, TResponse}"/>,
+    /// <see cref="IStreamPipelineBehavior{TRequest, TItem}"/>, or <see cref="INotificationBehavior{TNotification}"/>
+    /// one or more times.
     /// </typeparam>
     /// <returns>This builder.</returns>
     /// <exception cref="ArbitratorConfigurationException">
-    /// The behavior type is abstract, implements no behavior contract, is already registered, or would run twice for
-    /// a request; or a service provider has attempted to resolve <see cref="ISender"/> or <see cref="IPublisher"/>; or
-    /// the service collection is read-only.
+    /// The behavior type is abstract, implements no behavior contract, is already registered, or would run twice; or
+    /// a service provider has attempted to resolve <see cref="ISender"/> or <see cref="IPublisher"/>; or the service
+    /// collection is read-only.
     /// </exception>
     public ArbitratorBuilder AddBehavior<
         [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] TBehavior>()
@@ -81,13 +82,13 @@ public sealed class ArbitratorBuilder
     }
 
     /// <summary>
-    /// Registers an open generic behavior at the next position in the pipeline order. It applies to every request of
-    /// its kind whose request and response types satisfy the runtime generic constraints of the behavior.
+    /// Registers an open generic behavior at the next position in the pipeline order. It applies to every request or
+    /// notification of its kind whose types satisfy the runtime generic constraints of the behavior.
     /// </summary>
     /// <param name="openBehaviorType">
-    /// A generic type definition with two type parameters, such as <c>typeof(LoggingBehavior&lt;,&gt;)</c>, that
-    /// implements <see cref="IPipelineBehavior{TRequest, TResponse}"/> or
-    /// <see cref="IStreamPipelineBehavior{TRequest, TItem}"/> with those parameters in order.
+    /// A generic type definition, such as <c>typeof(LoggingBehavior&lt;,&gt;)</c>, that implements exactly one of
+    /// <see cref="IPipelineBehavior{TRequest, TResponse}"/>, <see cref="IStreamPipelineBehavior{TRequest, TItem}"/>,
+    /// or <see cref="INotificationBehavior{TNotification}"/> with its type parameters in order.
     /// </param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentNullException">
@@ -123,6 +124,7 @@ public sealed class ArbitratorBuilder
     /// resolve <see cref="ISender"/> or <see cref="IPublisher"/>; or the service collection is read-only.
     /// </exception>
     [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
+    [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
     public ArbitratorBuilder AddNotificationHandler<
         [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] THandler>()
         where THandler : class

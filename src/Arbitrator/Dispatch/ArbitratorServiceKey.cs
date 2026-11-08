@@ -5,8 +5,7 @@ namespace Arbitrator.Dispatch;
 /// application's own registrations.
 /// </summary>
 /// <remarks>
-/// Request components and notification handlers use separate keys, so a class registered in both roles has a
-/// distinct registration for each role.
+/// Each role uses its own key, so a class registered in several roles has a distinct registration for each role.
 /// </remarks>
 internal sealed class ArbitratorServiceKey
 {
@@ -30,6 +29,11 @@ internal sealed class ArbitratorServiceKey
     /// Gets the key under which notification handlers are registered.
     /// </summary>
     public static ArbitratorServiceKey NotificationHandlers { get; } = new("Arbitrator notification handlers");
+
+    /// <summary>
+    /// Gets the key under which notification behaviors are registered.
+    /// </summary>
+    public static ArbitratorServiceKey NotificationBehaviors { get; } = new("Arbitrator notification behaviors");
 
     /// <summary>
     /// Returns a readable name for the key, which appears in dependency injection error messages.

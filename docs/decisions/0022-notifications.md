@@ -1,6 +1,6 @@
 # 22. Notifications
 
-- **Status:** Accepted
+- **Status:** Accepted, partly superseded by [35](0035-per-handler-notification-behaviors.md)
 - **Date:** 2026-11-07
 - **Design:** [notifications](../design/notifications.md)
 - **Supersedes:** [17](0017-defer-notifications.md)

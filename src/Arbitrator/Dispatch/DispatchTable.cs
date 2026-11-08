@@ -99,11 +99,14 @@ internal sealed class DispatchTable
         IEnumerable<Type> requestComponentTypes =
             maps.PipelineInvokers.Values.SelectMany(invoker => invoker.ComponentTypes);
         IEnumerable<Type> notificationHandlerTypes =
-            maps.NotificationInvokers.Values.SelectMany(invoker => invoker.ComponentTypes);
+            maps.NotificationInvokers.Values.SelectMany(invoker => invoker.HandlerTypes);
+        IEnumerable<Type> notificationBehaviorTypes =
+            maps.NotificationInvokers.Values.SelectMany(invoker => invoker.BehaviorTypes);
         Type[] missingComponentTypes =
         [
             .. FindUnregistered(requestComponentTypes, ArbitratorServiceKey.RequestComponents, keyedServices),
             .. FindUnregistered(notificationHandlerTypes, ArbitratorServiceKey.NotificationHandlers, keyedServices),
+            .. FindUnregistered(notificationBehaviorTypes, ArbitratorServiceKey.NotificationBehaviors, keyedServices),
         ];
 
         if (missingComponentTypes.Length > 0)

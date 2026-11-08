@@ -58,6 +58,31 @@ internal abstract class PipelineInvoker
     }
 
     /// <summary>
+    /// Resolves this pipeline's behaviors from a scope, outermost first.
+    /// </summary>
+    /// <typeparam name="TBehavior">The behavior contract of the pipeline.</typeparam>
+    /// <param name="services">The scope's service provider.</param>
+    /// <returns>The behavior instances, outermost first.</returns>
+    protected TBehavior[] ResolveBehaviors<TBehavior>(IServiceProvider services)
+    {
+        return ComponentResolver.ResolveBehaviors<TBehavior>(
+            services,
+            BehaviorTypes,
+            ArbitratorServiceKey.RequestComponents);
+    }
+
+    /// <summary>
+    /// Resolves this pipeline's handler from a scope.
+    /// </summary>
+    /// <typeparam name="THandler">The handler contract of the pipeline.</typeparam>
+    /// <param name="services">The scope's service provider.</param>
+    /// <returns>The handler instance.</returns>
+    protected THandler ResolveHandler<THandler>(IServiceProvider services)
+    {
+        return ComponentResolver.Resolve<THandler>(services, HandlerType, ArbitratorServiceKey.RequestComponents);
+    }
+
+    /// <summary>
     /// Creates an invoker for the same handler that runs the given behaviors, outermost first.
     /// </summary>
     /// <param name="behaviorTypes">The closed behavior types, in registration order.</param>

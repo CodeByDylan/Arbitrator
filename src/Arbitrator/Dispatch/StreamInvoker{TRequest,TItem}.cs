@@ -37,8 +37,8 @@ internal sealed class StreamInvoker<TRequest, TItem> : StreamInvoker<TItem>
     {
         var typedRequest = (TRequest)request;
         IStreamPipelineBehavior<TRequest, TItem>[] behaviors =
-            ComponentResolver.ResolveBehaviors<IStreamPipelineBehavior<TRequest, TItem>>(services, BehaviorTypes);
-        var handler = ComponentResolver.Resolve<IStreamRequestHandler<TRequest, TItem>>(services, HandlerType);
+            ResolveBehaviors<IStreamPipelineBehavior<TRequest, TItem>>(services);
+        var handler = ResolveHandler<IStreamRequestHandler<TRequest, TItem>>(services);
 
         if (behaviors.Length == 0)
         {
