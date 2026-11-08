@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Arbitrator.Tests.Support;
+using TUnit.Assertions.Enums;
 
 namespace Arbitrator.Tests.Streaming;
 
@@ -25,7 +26,7 @@ public sealed class StreamExceptionTests
         });
 
         await Assert.That(thrown).IsSameReferenceAs(host.Journal.Captured<StreamFailedException>().Single());
-        await Assert.That(values).IsEquivalentTo([2, 1]);
+        await Assert.That(values).IsEquivalentTo([2, 1], CollectionOrdering.Matching);
         await Expect.EntriesAsync(host.Journal, "StreamFirst.before", "StreamFirst.item", "StreamFirst.item");
     }
 

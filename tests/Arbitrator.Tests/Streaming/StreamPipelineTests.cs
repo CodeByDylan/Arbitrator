@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using Arbitrator.Tests.Support;
 using Microsoft.Extensions.DependencyInjection;
+using TUnit.Assertions.Enums;
 
 namespace Arbitrator.Tests.Streaming;
 
@@ -94,7 +95,7 @@ public sealed class StreamPipelineTests
 
         List<Tick> items = await Streams.ReadAllAsync(host.Sender.StreamAsync(new Countdown(4)));
 
-        await Assert.That(items.Select(item => item.Value)).IsEquivalentTo([8, 4]);
+        await Assert.That(items.Select(item => item.Value)).IsEquivalentTo([8, 4], CollectionOrdering.Matching);
     }
 
     [Test]
