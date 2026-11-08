@@ -11,6 +11,9 @@ Arbitrator.ArbitratorBuilder.AddOpenBehavior(System.Type! openBehaviorType) -> A
 Arbitrator.ArbitratorConfigurationException
 Arbitrator.ArbitratorConfigurationException.ArbitratorConfigurationException(string! message) -> void
 Arbitrator.ArbitratorConfigurationException.ArbitratorConfigurationException(string! message, System.Exception? innerException) -> void
+Arbitrator.ArbitratorRegistrations
+Arbitrator.ArbitratorRegistrations.Notifications.get -> System.Collections.Generic.IReadOnlyList<Arbitrator.NotificationRegistration!>!
+Arbitrator.ArbitratorRegistrations.Requests.get -> System.Collections.Generic.IReadOnlyList<Arbitrator.RequestRegistration!>!
 Arbitrator.INotification
 Arbitrator.INotificationHandler<TNotification>
 Arbitrator.INotificationHandler<TNotification>.HandleAsync(TNotification notification, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
@@ -33,7 +36,16 @@ Arbitrator.IStreamPipelineBehavior<TRequest, TItem>.HandleAsync(TRequest request
 Arbitrator.IStreamRequest<TItem>
 Arbitrator.IStreamRequestHandler<TRequest, TItem>
 Arbitrator.IStreamRequestHandler<TRequest, TItem>.HandleAsync(TRequest request, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+Arbitrator.NotificationRegistration
+Arbitrator.NotificationRegistration.HandlerTypes.get -> System.Collections.Generic.IReadOnlyList<System.Type!>!
+Arbitrator.NotificationRegistration.NotificationType.get -> System.Type!
 Arbitrator.RequestContinuation<TResponse>
+Arbitrator.RequestRegistration
+Arbitrator.RequestRegistration.BehaviorTypes.get -> System.Collections.Generic.IReadOnlyList<System.Type!>!
+Arbitrator.RequestRegistration.HandlerType.get -> System.Type!
+Arbitrator.RequestRegistration.IsStream.get -> bool
+Arbitrator.RequestRegistration.RequestType.get -> System.Type!
+Arbitrator.RequestRegistration.ResponseType.get -> System.Type!
 Arbitrator.StreamContinuation<TItem>
 Arbitrator.Unit
 Arbitrator.Unit.Equals(Arbitrator.Unit other) -> bool
