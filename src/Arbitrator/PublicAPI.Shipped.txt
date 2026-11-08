@@ -1,0 +1,40 @@
+#nullable enable
+Arbitrator.ArbitratorBuilder
+Arbitrator.ArbitratorBuilder.AddBehavior<TBehavior>() -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddHandler<THandler>() -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddNotificationHandler<THandler>() -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddOpenBehavior(System.Type! openBehaviorType) -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorConfigurationException
+Arbitrator.ArbitratorConfigurationException.ArbitratorConfigurationException(string! message) -> void
+Arbitrator.ArbitratorConfigurationException.ArbitratorConfigurationException(string! message, System.Exception? innerException) -> void
+Arbitrator.INotification
+Arbitrator.INotificationHandler<TNotification>
+Arbitrator.INotificationHandler<TNotification>.HandleAsync(TNotification notification, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Arbitrator.IPipelineBehavior<TRequest, TResponse>
+Arbitrator.IPipelineBehavior<TRequest, TResponse>.HandleAsync(TRequest request, Arbitrator.RequestContinuation<TResponse>! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<TResponse>!
+Arbitrator.IPublisher
+Arbitrator.IPublisher.PublishAsync(Arbitrator.INotification! notification, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Arbitrator.IRequest
+Arbitrator.IRequest<TResponse>
+Arbitrator.IRequestHandler<TRequest, TResponse>
+Arbitrator.IRequestHandler<TRequest, TResponse>.HandleAsync(TRequest request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<TResponse>!
+Arbitrator.IRequestHandler<TRequest>
+Arbitrator.IRequestHandler<TRequest>.HandleAsync(TRequest request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Arbitrator.ISender
+Arbitrator.ISender.SendAsync(Arbitrator.IRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Arbitrator.ISender.SendAsync<TResponse>(Arbitrator.IRequest<TResponse>! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TResponse>!
+Arbitrator.RequestContinuation<TResponse>
+Arbitrator.Unit
+Arbitrator.Unit.Equals(Arbitrator.Unit other) -> bool
+Arbitrator.Unit.Unit() -> void
+Microsoft.Extensions.DependencyInjection.ArbitratorServiceCollectionExtensions
+Microsoft.Extensions.DependencyInjection.ArbitratorServiceCollectionExtensions.extension(Microsoft.Extensions.DependencyInjection.IServiceCollection!)
+Microsoft.Extensions.DependencyInjection.ArbitratorServiceCollectionExtensions.extension(Microsoft.Extensions.DependencyInjection.IServiceCollection!).AddArbitrator(System.Action<Arbitrator.ArbitratorBuilder!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+override Arbitrator.Unit.GetHashCode() -> int
+static Arbitrator.Unit.operator !=(Arbitrator.Unit left, Arbitrator.Unit right) -> bool
+static Arbitrator.Unit.operator ==(Arbitrator.Unit left, Arbitrator.Unit right) -> bool
+static Arbitrator.Unit.Value.get -> Arbitrator.Unit
+static Microsoft.Extensions.DependencyInjection.ArbitratorServiceCollectionExtensions.AddArbitrator(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Arbitrator.ArbitratorBuilder!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+virtual Arbitrator.RequestContinuation<TResponse>.Invoke(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<TResponse>!
+~override Arbitrator.Unit.Equals(object obj) -> bool
+~override Arbitrator.Unit.ToString() -> string

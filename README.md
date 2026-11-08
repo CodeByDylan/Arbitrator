@@ -7,7 +7,7 @@ A small, opinionated, in-process mediator for .NET 11.
 Arbitrator sends a typed request to exactly one handler, and publishes notifications to any number of handlers. Along
 the way, a request passes through one ordered pipeline of behaviors, and every component is resolved from the caller's
 dependency injection scope. The behavioral contract
-is small enough to read in one sitting. `DESIGN.md`, in the root of the source repository, specifies it in full.
+is small enough to read in one sitting. `docs/contract.md`, in the source repository, specifies it in full.
 
 - **Exactly one handler** for each concrete request type, selected by the request's exact runtime type.
 - **Requests with and without a response.** Handlers of no-response requests return a plain `Task`.

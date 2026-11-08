@@ -26,8 +26,10 @@ The design behind this process is in `docs/design/ci-and-release.md`.
 ## Releasing a version
 
 1. **Set the version.** Open a pull request that sets `VersionPrefix` and `VersionSuffix` in
-   `src/Arbitrator/Arbitrator.csproj` to the new version. Update `README.md` if the release changes documented
-   behavior. Merge it once the "Build and test" check passes.
+   `src/Arbitrator/Arbitrator.csproj` to the new version. Move every entry from `src/Arbitrator/PublicAPI.Unshipped.txt`
+   into `PublicAPI.Shipped.txt`, leaving only the `#nullable enable` line in the unshipped file. An entry marked
+   `*REMOVED*` instead deletes its matching line from the shipped file. Update `README.md` if the release changes
+   documented behavior. Merge it once the "Build and test" check passes.
 2. **Draft the release.** On GitHub, under **Releases**, choose **Draft a new release**:
    - Create a new tag `v<version>` (for example `v0.2.0-preview.1`) targeting `main` at the merged commit.
    - Write the release notes, including any breaking changes.

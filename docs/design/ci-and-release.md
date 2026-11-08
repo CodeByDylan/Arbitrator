@@ -6,6 +6,7 @@
 | Date | 2026-11-07 |
 | Branch | `feature/ci-release`, from `main` at the v0.1 merge |
 | Repository | `github.com/CodeByDylan/Arbitrator` (public) |
+| Note | `DESIGN.md` has since been split up ([decision 24](../decisions/0024-documentation-layout.md)). Sections that existed in v0.1 are in [`requests-and-pipeline.md`](requests-and-pipeline.md). Sections added or changed later now live in [`contract.md`](../contract.md), and the git history holds the last version of `DESIGN.md` |
 
 ## Summary
 
