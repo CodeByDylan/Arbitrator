@@ -1,1 +1,13 @@
 #nullable enable
+Arbitrator.ArbitratorRegistrations
+Arbitrator.ArbitratorRegistrations.Notifications.get -> System.Collections.Generic.IReadOnlyList<Arbitrator.NotificationRegistration!>!
+Arbitrator.ArbitratorRegistrations.Requests.get -> System.Collections.Generic.IReadOnlyList<Arbitrator.RequestRegistration!>!
+Arbitrator.NotificationRegistration
+Arbitrator.NotificationRegistration.HandlerTypes.get -> System.Collections.Generic.IReadOnlyList<System.Type!>!
+Arbitrator.NotificationRegistration.NotificationType.get -> System.Type!
+Arbitrator.RequestRegistration
+Arbitrator.RequestRegistration.BehaviorTypes.get -> System.Collections.Generic.IReadOnlyList<System.Type!>!
+Arbitrator.RequestRegistration.HandlerType.get -> System.Type!
+Arbitrator.RequestRegistration.IsStream.get -> bool
+Arbitrator.RequestRegistration.RequestType.get -> System.Type!
+Arbitrator.RequestRegistration.ResponseType.get -> System.Type!

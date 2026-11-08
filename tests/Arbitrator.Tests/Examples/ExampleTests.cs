@@ -116,6 +116,32 @@ public sealed class ExampleTests
         await Assert.That(none).IsEmpty();
     }
 
+    [Test]
+    public async Task Every_example_request_type_has_a_handler()
+    {
+        await using TestHost host = CreateHost();
+        ArbitratorRegistrations registrations = host.Provider.GetRequiredService<ArbitratorRegistrations>();
+
+        HashSet<Type> handled = [.. registrations.Requests.Select(request => request.RequestType)];
+        Type[] unhandled =
+        [
+            .. typeof(ExampleTests).Assembly.GetTypes()
+                .Where(type => type.Namespace == typeof(ExampleTests).Namespace)
+                .Where(type => type is { IsAbstract: false, IsGenericTypeDefinition: false })
+                .Where(IsRequestType)
+                .Where(type => !handled.Contains(type)),
+        ];
+
+        await Assert.That(unhandled).IsEmpty();
+    }
+
+    private static bool IsRequestType(Type type)
+    {
+        return type.GetInterfaces().Any(contract => contract.IsGenericType
+            && (contract.GetGenericTypeDefinition() == typeof(IRequest<>)
+                || contract.GetGenericTypeDefinition() == typeof(IStreamRequest<>)));
+    }
+
     private static TestHost CreateHost()
     {
         return TestHost.CreateWithServices(services => services

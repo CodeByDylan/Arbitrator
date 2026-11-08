@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Arbitrator.Tests.Support;
+using TUnit.Assertions.Enums;
 
 namespace Arbitrator.Tests.Streaming;
 
@@ -15,7 +16,7 @@ public sealed class StreamDispatchTests
 
         List<Tick> items = await Streams.ReadAllAsync(host.Sender.StreamAsync(new Countdown(3)));
 
-        await Assert.That(items.Select(item => item.Value)).IsEquivalentTo([3, 2, 1]);
+        await Assert.That(items.Select(item => item.Value)).IsEquivalentTo([3, 2, 1], CollectionOrdering.Matching);
         await Assert.That(items.SequenceEqual(host.Journal.Captured<Tick>(), ReferenceEqualityComparer.Instance))
             .IsTrue();
     }
@@ -40,7 +41,7 @@ public sealed class StreamDispatchTests
 
         List<int> items = await Streams.ReadAllAsync(host.Sender.StreamAsync(new Repeat(3)));
 
-        await Assert.That(items).IsEquivalentTo([1, 2, 3]);
+        await Assert.That(items).IsEquivalentTo([1, 2, 3], CollectionOrdering.Matching);
     }
 
     [Test]
@@ -51,7 +52,7 @@ public sealed class StreamDispatchTests
 
         List<Tick> items = await Streams.ReadAllAsync(host.Sender.StreamAsync(request));
 
-        await Assert.That(items.Select(item => item.Value)).IsEquivalentTo([2, 1]);
+        await Assert.That(items.Select(item => item.Value)).IsEquivalentTo([2, 1], CollectionOrdering.Matching);
     }
 
     [Test]

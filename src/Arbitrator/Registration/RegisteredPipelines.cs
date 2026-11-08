@@ -113,6 +113,12 @@ internal sealed class RegisteredPipelines
     }
 
     /// <summary>
+    /// Describes every registered request and stream request type, in no particular order.
+    /// </summary>
+    /// <returns>One description per request type.</returns>
+    public IEnumerable<RequestRegistration> Describe() => _plansByRequestType.Values.Select(plan => plan.Describe());
+
+    /// <summary>
     /// Creates the invoker for every registered request and stream request type.
     /// </summary>
     /// <returns>The invokers, keyed by request type.</returns>
