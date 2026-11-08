@@ -15,6 +15,8 @@ Arbitrator.ArbitratorRegistrations
 Arbitrator.ArbitratorRegistrations.Notifications.get -> System.Collections.Generic.IReadOnlyList<Arbitrator.NotificationRegistration!>!
 Arbitrator.ArbitratorRegistrations.Requests.get -> System.Collections.Generic.IReadOnlyList<Arbitrator.RequestRegistration!>!
 Arbitrator.INotification
+Arbitrator.INotificationBehavior<TNotification>
+Arbitrator.INotificationBehavior<TNotification>.HandleAsync(TNotification notification, System.Type! handlerType, Arbitrator.NotificationContinuation! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
 Arbitrator.INotificationHandler<TNotification>
 Arbitrator.INotificationHandler<TNotification>.HandleAsync(TNotification notification, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
 Arbitrator.IPipelineBehavior<TRequest, TResponse>
@@ -36,7 +38,9 @@ Arbitrator.IStreamPipelineBehavior<TRequest, TItem>.HandleAsync(TRequest request
 Arbitrator.IStreamRequest<TItem>
 Arbitrator.IStreamRequestHandler<TRequest, TItem>
 Arbitrator.IStreamRequestHandler<TRequest, TItem>.HandleAsync(TRequest request, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+Arbitrator.NotificationContinuation
 Arbitrator.NotificationRegistration
+Arbitrator.NotificationRegistration.BehaviorTypes.get -> System.Collections.Generic.IReadOnlyList<System.Type!>!
 Arbitrator.NotificationRegistration.HandlerTypes.get -> System.Collections.Generic.IReadOnlyList<System.Type!>!
 Arbitrator.NotificationRegistration.NotificationType.get -> System.Type!
 Arbitrator.RequestContinuation<TResponse>
@@ -58,6 +62,7 @@ static Arbitrator.Unit.operator !=(Arbitrator.Unit left, Arbitrator.Unit right) 
 static Arbitrator.Unit.operator ==(Arbitrator.Unit left, Arbitrator.Unit right) -> bool
 static Arbitrator.Unit.Value.get -> Arbitrator.Unit
 static Microsoft.Extensions.DependencyInjection.ArbitratorServiceCollectionExtensions.AddArbitrator(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Arbitrator.ArbitratorBuilder!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+virtual Arbitrator.NotificationContinuation.Invoke(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
 virtual Arbitrator.RequestContinuation<TResponse>.Invoke(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<TResponse>!
 virtual Arbitrator.StreamContinuation<TItem>.Invoke(System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
 ~override Arbitrator.Unit.Equals(object obj) -> bool
