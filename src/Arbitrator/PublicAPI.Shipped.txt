@@ -2,6 +2,10 @@
 Arbitrator.ArbitratorBuilder
 Arbitrator.ArbitratorBuilder.AddBehavior<TBehavior>() -> Arbitrator.ArbitratorBuilder!
 Arbitrator.ArbitratorBuilder.AddHandler<THandler>() -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddHandlersFromAssembly(System.Reflection.Assembly! assembly) -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddHandlersFromAssembly(System.Reflection.Assembly! assembly, System.Func<System.Type!, bool>! filter) -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddHandlersFromAssemblyContaining<TMarker>() -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddHandlersFromAssemblyContaining<TMarker>(System.Func<System.Type!, bool>! filter) -> Arbitrator.ArbitratorBuilder!
 Arbitrator.ArbitratorBuilder.AddNotificationHandler<THandler>() -> Arbitrator.ArbitratorBuilder!
 Arbitrator.ArbitratorBuilder.AddOpenBehavior(System.Type! openBehaviorType) -> Arbitrator.ArbitratorBuilder!
 Arbitrator.ArbitratorConfigurationException
