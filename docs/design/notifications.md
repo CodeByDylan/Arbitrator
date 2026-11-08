@@ -7,6 +7,7 @@
 | Date | 2026-11-07 |
 | Branch | `feature/arbitrator-v0.2`, from `main` at the v0.1 merge |
 | Contract reference | `DESIGN.md` (v0.1). This document extends it and names every section of it that changes |
+| Note | `DESIGN.md` has since been split up ([decision 24](../decisions/0024-documentation-layout.md)). Sections that existed in v0.1 are in [`requests-and-pipeline.md`](requests-and-pipeline.md). Sections added or changed later now live in [`contract.md`](../contract.md), and the git history holds the last version of `DESIGN.md` |
 
 ## Summary
 
