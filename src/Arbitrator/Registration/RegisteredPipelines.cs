@@ -113,10 +113,10 @@ internal sealed class RegisteredPipelines
     }
 
     /// <summary>
-    /// Creates the invoker for every registered request type.
+    /// Creates the invoker for every registered request and stream request type.
     /// </summary>
     /// <returns>The invokers, keyed by request type.</returns>
-    public FrozenDictionary<Type, RequestInvoker> CreateInvokers()
+    public FrozenDictionary<Type, PipelineInvoker> CreateInvokers()
     {
         return _plansByRequestType.ToFrozenDictionary(pair => pair.Key, pair => pair.Value.CreateInvoker());
     }

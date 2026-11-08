@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Arbitrator.Dispatch;
 
@@ -11,27 +10,20 @@ namespace Arbitrator.Dispatch;
 internal sealed class RequestInvoker<TRequest, TResponse> : RequestInvoker<TResponse>
     where TRequest : IRequest<TResponse>
 {
-    private readonly Type _handlerType;
-    private readonly ImmutableArray<Type> _behaviorTypes;
-
     /// <summary>
     /// Creates an invoker for a handler and an ordered set of behaviors.
     /// </summary>
     /// <param name="handlerType">The handler implementation type, registered under the Arbitrator service key.</param>
     /// <param name="behaviorTypes">The closed behavior types, outermost first.</param>
     public RequestInvoker(Type handlerType, ImmutableArray<Type> behaviorTypes)
+        : base(handlerType, behaviorTypes)
     {
-        _handlerType = handlerType;
-        _behaviorTypes = behaviorTypes;
     }
 
     /// <inheritdoc/>
-    public override IReadOnlyList<Type> ComponentTypes => [_handlerType, .. _behaviorTypes];
-
-    /// <inheritdoc/>
-    public override RequestInvoker WithBehaviors(ImmutableArray<Type> behaviorTypes)
+    public override PipelineInvoker WithBehaviors(ImmutableArray<Type> behaviorTypes)
     {
-        return new RequestInvoker<TRequest, TResponse>(_handlerType, behaviorTypes);
+        return new RequestInvoker<TRequest, TResponse>(HandlerType, behaviorTypes);
     }
 
     /// <inheritdoc/>
@@ -44,10 +36,9 @@ internal sealed class RequestInvoker<TRequest, TResponse> : RequestInvoker<TResp
         CancellationToken cancellationToken)
     {
         var typedRequest = (TRequest)request;
-        IPipelineBehavior<TRequest, TResponse>[] behaviors = ResolveBehaviors(services);
-        var handler = (IRequestHandler<TRequest, TResponse>)services.GetRequiredKeyedService(
-            _handlerType,
-            ArbitratorServiceKey.RequestComponents);
+        IPipelineBehavior<TRequest, TResponse>[] behaviors =
+            ComponentResolver.ResolveBehaviors<IPipelineBehavior<TRequest, TResponse>>(services, BehaviorTypes);
+        var handler = ComponentResolver.Resolve<IRequestHandler<TRequest, TResponse>>(services, HandlerType);
 
         if (behaviors.Length == 0)
         {
@@ -55,25 +46,6 @@ internal sealed class RequestInvoker<TRequest, TResponse> : RequestInvoker<TResp
         }
 
         return RunPipeline(typedRequest, behaviors, handler, cancellationToken);
-    }
-
-    /// <summary>
-    /// Resolves the behaviors from a scope, outermost first.
-    /// </summary>
-    /// <param name="services">The scope's service provider.</param>
-    /// <returns>The behavior instances, outermost first.</returns>
-    private IPipelineBehavior<TRequest, TResponse>[] ResolveBehaviors(IServiceProvider services)
-    {
-        var behaviors = new IPipelineBehavior<TRequest, TResponse>[_behaviorTypes.Length];
-
-        for (int index = 0; index < behaviors.Length; index++)
-        {
-            behaviors[index] = (IPipelineBehavior<TRequest, TResponse>)services.GetRequiredKeyedService(
-                _behaviorTypes[index],
-                ArbitratorServiceKey.RequestComponents);
-        }
-
-        return behaviors;
     }
 
     /// <summary>

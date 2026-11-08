@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Arbitrator.Tests.Support;
 
 namespace Arbitrator.Tests.Examples;
@@ -19,6 +20,17 @@ public sealed class InMemoryCustomerRepository(Journal journal) : ICustomerRepos
     public Task<Customer?> FindAsync(Guid id, CancellationToken cancellationToken)
     {
         return Task.FromResult(id == KnownCustomerId ? _knownCustomer : null);
+    }
+
+    /// <inheritdoc/>
+    public async IAsyncEnumerable<Customer> SearchAsync(
+        string namePrefix,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        if (_knownCustomer.Name.StartsWith(namePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            yield return _knownCustomer;
+        }
     }
 
     /// <inheritdoc/>

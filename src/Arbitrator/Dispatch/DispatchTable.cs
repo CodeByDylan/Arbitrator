@@ -8,7 +8,7 @@ namespace Arbitrator.Dispatch;
 /// </summary>
 internal sealed class DispatchTable
 {
-    private readonly FrozenDictionary<Type, RequestInvoker> _invokersByRequestType;
+    private readonly FrozenDictionary<Type, PipelineInvoker> _invokersByRequestType;
     private readonly FrozenDictionary<Type, NotificationInvoker> _invokersByNotificationType;
 
     /// <summary>
@@ -17,7 +17,7 @@ internal sealed class DispatchTable
     /// <param name="maps">The request and notification invokers.</param>
     private DispatchTable(DispatchMaps maps)
     {
-        _invokersByRequestType = maps.RequestInvokers;
+        _invokersByRequestType = maps.PipelineInvokers;
         _invokersByNotificationType = maps.NotificationInvokers;
     }
 
@@ -50,15 +50,21 @@ internal sealed class DispatchTable
     /// <param name="requestType">The runtime type of the request.</param>
     /// <returns>The invoker for the request type.</returns>
     /// <exception cref="ArbitratorConfigurationException">No handler is registered for the request type.</exception>
-    public RequestInvoker<TResponse> GetInvoker<TResponse>(Type requestType)
+    public RequestInvoker<TResponse> GetRequestInvoker<TResponse>(Type requestType)
     {
-        if (_invokersByRequestType.TryGetValue(requestType, out RequestInvoker? invoker))
-        {
-            // A registered request type implements exactly one IRequest<>, so its response type is TResponse.
-            return (RequestInvoker<TResponse>)invoker;
-        }
+        return (RequestInvoker<TResponse>)GetInvoker(PipelineKind.Response, requestType, typeof(TResponse));
+    }
 
-        throw DispatchErrors.MissingHandler(requestType, typeof(TResponse), FindHandledBaseType(requestType));
+    /// <summary>
+    /// Finds the invoker for the exact runtime type of a stream request.
+    /// </summary>
+    /// <typeparam name="TItem">The item type requested by the caller.</typeparam>
+    /// <param name="requestType">The runtime type of the request.</param>
+    /// <returns>The invoker for the request type.</returns>
+    /// <exception cref="ArbitratorConfigurationException">No handler is registered for the request type.</exception>
+    public StreamInvoker<TItem> GetStreamInvoker<TItem>(Type requestType)
+    {
+        return (StreamInvoker<TItem>)GetInvoker(PipelineKind.Stream, requestType, typeof(TItem));
     }
 
     /// <summary>
@@ -85,7 +91,7 @@ internal sealed class DispatchTable
     private static void EnsureComponentsAreRegistered(DispatchMaps maps, IServiceProviderIsKeyedService keyedServices)
     {
         IEnumerable<Type> requestComponentTypes =
-            maps.RequestInvokers.Values.SelectMany(invoker => invoker.ComponentTypes);
+            maps.PipelineInvokers.Values.SelectMany(invoker => invoker.ComponentTypes);
         IEnumerable<Type> notificationHandlerTypes =
             maps.NotificationInvokers.Values.SelectMany(invoker => invoker.ComponentTypes);
         Type[] missingComponentTypes =
@@ -115,6 +121,28 @@ internal sealed class DispatchTable
         return componentTypes
             .Distinct()
             .Where(componentType => !keyedServices.IsKeyedService(componentType, serviceKey));
+    }
+
+    /// <summary>
+    /// Finds the invoker for the exact runtime type of a request of a known kind.
+    /// </summary>
+    /// <remarks>
+    /// A registered request type implements the request contract of exactly one kind, so an invoker found for a
+    /// request of <paramref name="kind"/> is an invoker of that kind for <paramref name="responseType"/>.
+    /// </remarks>
+    /// <param name="kind">The kind of pipeline the caller dispatches through.</param>
+    /// <param name="requestType">The runtime type of the request.</param>
+    /// <param name="responseType">The response or item type requested by the caller.</param>
+    /// <returns>The invoker for the request type.</returns>
+    /// <exception cref="ArbitratorConfigurationException">No handler is registered for the request type.</exception>
+    private PipelineInvoker GetInvoker(PipelineKind kind, Type requestType, Type responseType)
+    {
+        if (_invokersByRequestType.TryGetValue(requestType, out PipelineInvoker? invoker))
+        {
+            return invoker;
+        }
+
+        throw DispatchErrors.MissingHandler(kind, requestType, responseType, FindHandledBaseType(requestType));
     }
 
     /// <summary>

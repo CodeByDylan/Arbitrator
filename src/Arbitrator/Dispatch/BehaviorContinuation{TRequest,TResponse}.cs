@@ -5,7 +5,7 @@ namespace Arbitrator.Dispatch;
 /// </summary>
 /// <typeparam name="TRequest">The request type.</typeparam>
 /// <typeparam name="TResponse">The response type.</typeparam>
-internal sealed class BehaviorContinuation<TRequest, TResponse> : GuardedContinuation<TRequest, TResponse>
+internal sealed class BehaviorContinuation<TRequest, TResponse> : GuardedContinuation<TRequest, Task<TResponse>>
     where TRequest : IRequest<TResponse>
 {
     private readonly IPipelineBehavior<TRequest, TResponse> _behavior;

@@ -14,6 +14,14 @@ public interface ICustomerRepository
     Task<Customer?> FindAsync(Guid id, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Streams the customers whose name starts with a prefix.
+    /// </summary>
+    /// <param name="namePrefix">The start of the customer names to find.</param>
+    /// <param name="cancellationToken">The token that signals the search should be abandoned.</param>
+    /// <returns>The matching customers, as they are read.</returns>
+    IAsyncEnumerable<Customer> SearchAsync(string namePrefix, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Saves the changes made to loaded customers.
     /// </summary>
     /// <param name="cancellationToken">The token that signals the save should be abandoned.</param>

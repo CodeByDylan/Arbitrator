@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Arbitrator.Dispatch;
 
 /// <summary>
@@ -25,7 +27,7 @@ internal sealed class Sender : ISender
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        RequestInvoker<TResponse> invoker = _dispatchTable.GetInvoker<TResponse>(request.GetType());
+        RequestInvoker<TResponse> invoker = _dispatchTable.GetRequestInvoker<TResponse>(request.GetType());
         cancellationToken.ThrowIfCancellationRequested();
 
         return await invoker.InvokeAsync(request, _services, cancellationToken).ConfigureAwait(false);
@@ -35,5 +37,26 @@ internal sealed class Sender : ISender
     public async Task SendAsync(IRequest request, CancellationToken cancellationToken = default)
     {
         await SendAsync<Unit>(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Inside each read, <paramref name="cancellationToken"/> is the token of the read combined with the token passed
+    /// here, as the compiler combines them for every <see cref="EnumeratorCancellationAttribute"/> parameter.
+    /// </remarks>
+    public async IAsyncEnumerable<TItem> StreamAsync<TItem>(
+        IStreamRequest<TItem> request,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        StreamInvoker<TItem> invoker = _dispatchTable.GetStreamInvoker<TItem>(request.GetType());
+        cancellationToken.ThrowIfCancellationRequested();
+
+        IAsyncEnumerable<TItem> stream = invoker.Open(request, _services, cancellationToken);
+
+        await foreach (TItem item in stream.WithCancellation(cancellationToken).ConfigureAwait(false))
+        {
+            yield return item;
+        }
     }
 }

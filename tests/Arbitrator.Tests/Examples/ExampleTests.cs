@@ -98,6 +98,24 @@ public sealed class ExampleTests
             () => host.Sender.SendAsync(deactivateThroughInterface));
     }
 
+    [Test]
+    public async Task Search_streams_matching_customers_from_the_scoped_repository()
+    {
+        await using TestHost host = CreateHost();
+
+        List<CustomerDto> matching = [];
+        await foreach (CustomerDto customer in host.Sender.StreamAsync(new SearchCustomers("ada")))
+        {
+            matching.Add(customer);
+        }
+
+        List<CustomerDto> none = await Streams.ReadAllAsync(host.Sender.StreamAsync(new SearchCustomers("Grace")));
+
+        await Assert.That(matching).IsEquivalentTo(
+            [new CustomerDto(InMemoryCustomerRepository.KnownCustomerId, "Ada Lovelace", IsActive: true)]);
+        await Assert.That(none).IsEmpty();
+    }
+
     private static TestHost CreateHost()
     {
         return TestHost.CreateWithServices(services => services
@@ -108,7 +126,9 @@ public sealed class ExampleTests
                 .AddOpenBehavior(typeof(LoggingBehavior<,>))
                 .AddOpenBehavior(typeof(ValidationBehavior<,>))
                 .AddOpenBehavior(typeof(TransactionBehavior<,>))
+                .AddOpenBehavior(typeof(StreamLoggingBehavior<,>))
                 .AddHandler<GetCustomerHandler>()
+                .AddHandler<SearchCustomersHandler>()
                 .AddHandler<DeactivateCustomerHandler>()
                 .AddNotificationHandler<DeactivationAuditRecorder>()
                 .AddNotificationHandler<DeactivationEmailSender>()));

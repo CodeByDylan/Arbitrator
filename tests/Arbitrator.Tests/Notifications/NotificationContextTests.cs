@@ -35,7 +35,7 @@ public sealed class NotificationContextTests
         await Expect.EntriesAsync(host.Journal, "completed in the background");
     }
 
-    private static bool IsOnMarkedContext() => SynchronizationContext.Current is MarkedSynchronizationContext;
+    private static bool IsOnMarkedContext() => MarkedSynchronizationContext.IsCurrent;
 
     private static Task PublishOnContext(IPublisher publisher, SynchronizationContext context)
     {
@@ -65,29 +65,6 @@ public sealed class NotificationContextTests
 
         callerThread.Start();
         return outcome.Task;
-    }
-
-    public sealed class MarkedSynchronizationContext : SynchronizationContext
-    {
-        public override void Post(SendOrPostCallback d, object? state)
-        {
-            ThreadPool.QueueUserWorkItem(_ => RunOnThisContext(d, state));
-        }
-
-        private void RunOnThisContext(SendOrPostCallback callback, object? state)
-        {
-            SynchronizationContext? previous = Current;
-            SetSynchronizationContext(this);
-
-            try
-            {
-                callback(state);
-            }
-            finally
-            {
-                SetSynchronizationContext(previous);
-            }
-        }
     }
 
     public sealed class NonPumpingSynchronizationContext : SynchronizationContext

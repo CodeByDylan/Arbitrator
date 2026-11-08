@@ -11,11 +11,13 @@ is small enough to read in one sitting. `docs/contract.md`, in the source reposi
 
 - **Exactly one handler** for each concrete request type, selected by the request's exact runtime type.
 - **Requests with and without a response.** Handlers of no-response requests return a plain `Task`.
-- **One pipeline abstraction.** Behaviors run in registration order, and the first registered is the outermost.
+- **Streaming requests.** A handler returns `IAsyncEnumerable<T>`, and stream behaviors wrap the whole read.
+- **One pipeline abstraction for each kind of request.** Behaviors run in registration order, and the first
+  registered is the outermost.
 - **Notifications.** Zero or more handlers per notification type, run one after another in registration order.
 - **Explicit registration** with actionable configuration errors, plus opt-in assembly scanning for handlers. Behaviors
   are always registered explicitly.
-- **The caller's scope.** Arbitrator never creates a scope, caches an instance, or disposes anything.
+- **The caller's scope.** Arbitrator never creates a scope, caches an instance, or disposes a service.
 - **Unwrapped exceptions.** Exceptions reach the caller as the same instance, and cancellation is checked once and
   then forwarded.
 
@@ -143,6 +145,96 @@ await publisher.PublishAsync(new CustomerDeactivated(customer.Id, reason), cance
 - **In-process only.** There is no parallel or fire-and-forget publishing, no durability, and no outbox. Request
   behaviors never wrap notification handlers.
 
+## Streaming requests
+
+A stream request produces its results one at a time, as the caller reads them. Its single handler returns
+`IAsyncEnumerable<T>`:
+
+```csharp
+public sealed record SearchCustomers(string NamePrefix) : IStreamRequest<CustomerDto>;
+
+public sealed class SearchCustomersHandler(ICustomerRepository customers)
+    : IStreamRequestHandler<SearchCustomers, CustomerDto>
+{
+    public async IAsyncEnumerable<CustomerDto> HandleAsync(
+        SearchCustomers request,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await foreach (Customer customer in customers.SearchAsync(request.NamePrefix, cancellationToken))
+        {
+            yield return new CustomerDto(customer.Id, customer.Name, customer.IsActive);
+        }
+    }
+}
+```
+
+Register it with `AddHandler`, like any handler, and read it through `ISender.StreamAsync`:
+
+```csharp
+await foreach (CustomerDto customer in sender.StreamAsync(new SearchCustomers("Ada"), cancellationToken))
+{
+    Console.WriteLine(customer.Name);
+}
+```
+
+A stream behavior wraps the whole read, so code after its loop runs once the last item has been read. Register it
+with `AddBehavior` or `AddOpenBehavior`, in the same order as every other behavior:
+
+```csharp
+public sealed class StreamLoggingBehavior<TRequest, TItem>(ILogger<StreamLoggingBehavior<TRequest, TItem>> logger)
+    : IStreamPipelineBehavior<TRequest, TItem>
+    where TRequest : IStreamRequest<TItem>
+{
+    public async IAsyncEnumerable<TItem> HandleAsync(
+        TRequest request,
+        StreamContinuation<TItem> next,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        int count = 0;
+
+        try
+        {
+            await foreach (TItem item in next(cancellationToken))
+            {
+                count++;
+                yield return item;
+            }
+        }
+        finally
+        {
+            logger.LogInformation("Read {Count} items of {RequestType}", count, typeof(TRequest).Name);
+        }
+    }
+}
+```
+
+- **Lazy.** `StreamAsync` does nothing until the stream is read, and never throws. A missing handler, a null request,
+  or a canceled token surfaces from the first `MoveNextAsync`, where the stream is read.
+- **Each read is a dispatch.** Reading the same stream twice resolves new components and runs the handler twice.
+- **Cancellation.** The token passed to `StreamAsync` and a token passed with `WithCancellation` are both honored. The
+  token is checked once, when a read starts, and is then only forwarded, never checked between items.
+- **Stay inside the scope.** A stream is read with the components of the scope that resolved `ISender`. Don't return
+  it out of a `using` block that disposes that scope. In ASP.NET Core, returning it from an endpoint is fine: it is
+  read during the response, inside the request's scope.
+- **Behaviors stay apart.** `IPipelineBehavior` never wraps a stream handler, and `IStreamPipelineBehavior` never
+  wraps any other handler. `next` may be invoked once, and the stream it returns may be read once.
+- **Catching while yielding.** C# doesn't allow `yield return` inside a `try` block that has a `catch` clause. To
+  translate exceptions, read the inner enumerator by hand and wrap only `MoveNextAsync` in the `try`:
+
+  ```csharp
+  await using IAsyncEnumerator<TItem> items = next(cancellationToken).GetAsyncEnumerator(cancellationToken);
+
+  while (await MoveNextOrTranslateAsync(items))
+  {
+      yield return items.Current;
+  }
+  ```
+
+  Here `MoveNextOrTranslateAsync` awaits `items.MoveNextAsync()` inside a `try` and throws your own exception from its
+  `catch`.
+- **Stop when you're done.** A handler may produce items forever. End the read with cancellation or by stopping,
+  especially when you stream to a client.
+
 ## Assembly scanning
 
 Instead of listing every handler, you can register all handlers of an assembly in one call. Scanning is opt-in, and
@@ -154,8 +246,9 @@ builder.Services.AddArbitrator(arbitrator => arbitrator
     .AddHandlersFromAssemblyContaining<GetCustomerHandler>());
 ```
 
-- **What is registered.** Every concrete, non-generic class that implements `IRequestHandler<,>`,
-  `IRequestHandler<>`, or `INotificationHandler<>`, whatever its visibility, including `internal` and nested classes.
+- **What is registered.** Every concrete, non-generic class that implements `IRequestHandler<,>`, `IRequestHandler<>`,
+  `IStreamRequestHandler<,>`, or `INotificationHandler<>`, whatever its visibility, including `internal` and nested
+  classes.
   Every handler class in the assembly becomes reachable through `ISender` or `IPublisher`, so keep test-only or
   experimental handlers out of scanned assemblies, or exclude them with a filter.
 - **Behaviors stay explicit.** A scan never registers behaviors, because their registration order is the pipeline
@@ -187,11 +280,15 @@ builder.Services.AddArbitrator(arbitrator => arbitrator
 | Behavior order | Registration order across all `AddArbitrator` calls, with open and closed behaviors interleaved. The first registered is the outermost |
 | A behavior returns without calling `next` | Inner behaviors and the handler don't run |
 | `next` called twice | `InvalidOperationException` |
+| Creating a stream with `StreamAsync` | Nothing happens until it is read. Every failure surfaces from the first `MoveNextAsync` |
+| Reading a stream twice | Two dispatches: the handler runs twice |
+| Stream behaviors | Wrap the whole read, in the shared behavior order. They never wrap other handlers, and request behaviors never wrap stream handlers |
+| A stream behavior reads the stream from `next` twice | `InvalidOperationException` |
 | No handler for a notification's runtime type | Publishing succeeds |
 | A notification handler throws | Later handlers don't run, and the same exception instance reaches the caller |
 | Handler or behavior throws | The same exception instance reaches the caller |
-| Token already canceled | The send is canceled before anything is constructed |
-| Cancellation during the send | Forwarded only. Handlers decide how to observe it |
+| Token already canceled | The send, or the stream read, is canceled before anything is constructed. A stream observes both its `StreamAsync` token and the read's token |
+| Cancellation during the send or read | Forwarded only. Handlers decide how to observe it |
 | Lifetimes | `ISender` and `IPublisher` are scoped. Handlers, notification handlers, and behaviors are transient |
 | Disposal | The scope disposes handlers and behaviors when it ends |
 | Registration after the provider was built | `ArbitratorConfigurationException` when that provider resolves `ISender` or `IPublisher` |

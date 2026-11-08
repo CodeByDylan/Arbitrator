@@ -8,7 +8,7 @@ namespace Arbitrator.Registration;
 /// </summary>
 internal sealed class PipelinePlan
 {
-    private readonly RequestInvoker _invokerTemplate;
+    private readonly PipelineInvoker _invokerTemplate;
     private readonly List<PlannedBehavior> _behaviors;
 
     /// <summary>
@@ -20,7 +20,8 @@ internal sealed class PipelinePlan
     {
         Contract = contract;
         _behaviors = [];
-        _invokerTemplate = RequestInvoker.CreateTemplate(
+        _invokerTemplate = PipelineInvoker.CreateTemplate(
+            contract.Kind,
             contract.RequestType,
             contract.ResponseType,
             contract.HandlerType);
@@ -97,7 +98,7 @@ internal sealed class PipelinePlan
     /// Creates the invoker that runs the planned pipeline.
     /// </summary>
     /// <returns>The invoker.</returns>
-    public RequestInvoker CreateInvoker()
+    public PipelineInvoker CreateInvoker()
     {
         return _invokerTemplate.WithBehaviors([.. _behaviors.Select(behavior => behavior.ClosedType)]);
     }

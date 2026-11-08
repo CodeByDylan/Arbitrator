@@ -130,7 +130,8 @@ public sealed class BehaviorRegistrationTests
         ArbitratorConfigurationException exception = Expect.ThrowsExactly<ArbitratorConfigurationException>(
             () => services.AddArbitrator(arbitrator => arbitrator.AddBehavior<PingHandler>()));
 
-        await Assert.That(exception.Message).Contains("does not implement IPipelineBehavior<TRequest, TResponse>");
+        await Assert.That(exception.Message).Contains(
+            "implements neither IPipelineBehavior<TRequest, TResponse> nor IStreamPipelineBehavior<TRequest, TItem>");
     }
 
     [Test]
