@@ -27,7 +27,14 @@ Arbitrator.IRequestHandler<TRequest>.HandleAsync(TRequest request, System.Thread
 Arbitrator.ISender
 Arbitrator.ISender.SendAsync(Arbitrator.IRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 Arbitrator.ISender.SendAsync<TResponse>(Arbitrator.IRequest<TResponse>! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TResponse>!
+Arbitrator.ISender.StreamAsync<TItem>(Arbitrator.IStreamRequest<TItem>! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+Arbitrator.IStreamPipelineBehavior<TRequest, TItem>
+Arbitrator.IStreamPipelineBehavior<TRequest, TItem>.HandleAsync(TRequest request, Arbitrator.StreamContinuation<TItem>! next, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+Arbitrator.IStreamRequest<TItem>
+Arbitrator.IStreamRequestHandler<TRequest, TItem>
+Arbitrator.IStreamRequestHandler<TRequest, TItem>.HandleAsync(TRequest request, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
 Arbitrator.RequestContinuation<TResponse>
+Arbitrator.StreamContinuation<TItem>
 Arbitrator.Unit
 Arbitrator.Unit.Equals(Arbitrator.Unit other) -> bool
 Arbitrator.Unit.Unit() -> void
@@ -40,5 +47,6 @@ static Arbitrator.Unit.operator ==(Arbitrator.Unit left, Arbitrator.Unit right) 
 static Arbitrator.Unit.Value.get -> Arbitrator.Unit
 static Microsoft.Extensions.DependencyInjection.ArbitratorServiceCollectionExtensions.AddArbitrator(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Arbitrator.ArbitratorBuilder!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 virtual Arbitrator.RequestContinuation<TResponse>.Invoke(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<TResponse>!
+virtual Arbitrator.StreamContinuation<TItem>.Invoke(System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
 ~override Arbitrator.Unit.Equals(object obj) -> bool
 ~override Arbitrator.Unit.ToString() -> string
