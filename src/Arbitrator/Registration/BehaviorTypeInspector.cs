@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Arbitrator.Dispatch;
 
 namespace Arbitrator.Registration;
 
@@ -8,7 +9,7 @@ namespace Arbitrator.Registration;
 internal static class BehaviorTypeInspector
 {
     /// <summary>
-    /// Validates a closed behavior type and discovers the behavior contracts it implements.
+    /// Validates a closed behavior type and discovers the behavior contracts it implements, of any pipeline kind.
     /// </summary>
     /// <param name="behaviorType">The closed behavior type.</param>
     /// <param name="position">The registration position assigned to the behavior.</param>
@@ -27,8 +28,8 @@ internal static class BehaviorTypeInspector
 
         RequestResponseTypes[] contracts =
         [
-            .. GenericInterfaces.FindImplemented(behaviorType, typeof(IPipelineBehavior<,>))
-                .Select(ToRequestResponseTypes),
+            .. GenericInterfaces.FindPipelineContracts(behaviorType, static kind => kind.BehaviorContract)
+                .Select(contract => contract.Types),
         ];
 
         if (contracts.Length == 0)
@@ -47,7 +48,7 @@ internal static class BehaviorTypeInspector
     /// <returns>The behavior registration.</returns>
     /// <exception cref="ArbitratorConfigurationException">
     /// The type is not a generic type definition, is a value type, is abstract, or does not map its two type
-    /// parameters onto the behavior contract in order.
+    /// parameters onto exactly one behavior contract in order.
     /// </exception>
     public static OpenBehaviorRegistration InspectOpen(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type behaviorType,
@@ -68,39 +69,31 @@ internal static class BehaviorTypeInspector
             throw RegistrationErrors.AbstractBehavior(behaviorType);
         }
 
-        if (!HasOpenBehaviorShape(behaviorType))
-        {
-            throw RegistrationErrors.InvalidOpenBehaviorShape(behaviorType);
-        }
+        PipelineKind kind = FindOpenBehaviorKind(behaviorType)
+            ?? throw RegistrationErrors.InvalidOpenBehaviorShape(behaviorType);
 
-        return new OpenBehaviorRegistration(behaviorType, position);
+        return new OpenBehaviorRegistration(behaviorType, position, kind);
     }
 
     /// <summary>
-    /// Determines whether a generic type definition has two type parameters and implements exactly one behavior
-    /// contract whose type arguments are those parameters in declaration order.
+    /// Finds the pipeline kind of a generic type definition that has two type parameters and implements exactly one
+    /// behavior contract, of any kind, whose type arguments are those parameters in declaration order.
     /// </summary>
     /// <param name="definition">The generic type definition.</param>
-    /// <returns><see langword="true"/> when the definition can be closed over any request and response type.</returns>
-    private static bool HasOpenBehaviorShape(
+    /// <returns>
+    /// The kind of the behavior contract, or <see langword="null"/> when the definition doesn't have that shape.
+    /// </returns>
+    private static PipelineKind? FindOpenBehaviorKind(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type definition)
     {
         Type[] typeParameters = definition.GetGenericArguments();
-        Type[] behaviorContracts = GenericInterfaces.FindImplemented(definition, typeof(IPipelineBehavior<,>));
+        IReadOnlyList<PipelineContract> behaviorContracts =
+            GenericInterfaces.FindPipelineContracts(definition, static kind => kind.BehaviorContract);
 
-        return typeParameters.Length == 2
+        bool hasOpenBehaviorShape = typeParameters.Length == 2
             && behaviorContracts is [var behaviorContract]
-            && behaviorContract.GetGenericArguments().SequenceEqual(typeParameters);
-    }
+            && behaviorContract.Contract.GetGenericArguments().SequenceEqual(typeParameters);
 
-    /// <summary>
-    /// Reads the request and response types of a closed behavior interface.
-    /// </summary>
-    /// <param name="behaviorInterface">A closed <c>IPipelineBehavior&lt;TRequest, TResponse&gt;</c> interface.</param>
-    /// <returns>The request and response types.</returns>
-    private static RequestResponseTypes ToRequestResponseTypes(Type behaviorInterface)
-    {
-        Type[] typeArguments = behaviorInterface.GetGenericArguments();
-        return new RequestResponseTypes(typeArguments[0], typeArguments[1]);
+        return hasOpenBehaviorShape ? behaviorContracts[0].Kind : null;
     }
 }

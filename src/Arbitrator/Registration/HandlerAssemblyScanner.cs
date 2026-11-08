@@ -120,14 +120,14 @@ internal static class HandlerAssemblyScanner
     }
 
     /// <summary>
-    /// Determines whether a type implements a request handler contract.
+    /// Determines whether a type implements a request handler contract of any pipeline kind, including streams.
     /// </summary>
     /// <param name="type">The type.</param>
     /// <returns><see langword="true"/> when the type implements a request handler contract.</returns>
     [RequiresUnreferencedCode(RegistrationReflection.ScanningMessage)]
     private static bool ImplementsRequestHandlerContract(Type type)
     {
-        return GenericInterfaces.FindImplemented(type, typeof(IRequestHandler<,>)).Length > 0;
+        return GenericInterfaces.FindPipelineContracts(type, static kind => kind.HandlerContract).Count > 0;
     }
 
     /// <summary>

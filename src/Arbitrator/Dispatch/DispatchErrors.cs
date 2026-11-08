@@ -10,18 +10,21 @@ internal static class DispatchErrors
     /// <summary>
     /// Reports a request type that has no registered handler.
     /// </summary>
+    /// <param name="kind">The kind of pipeline the caller dispatched through.</param>
     /// <param name="requestType">The runtime type of the request.</param>
-    /// <param name="responseType">The response type requested by the caller.</param>
+    /// <param name="responseType">The response or item type requested by the caller.</param>
     /// <param name="handledBaseType">A base type of the request that has a handler, if any.</param>
     /// <returns>The exception to throw.</returns>
     public static ArbitratorConfigurationException MissingHandler(
+        PipelineKind kind,
         Type requestType,
         Type responseType,
         Type? handledBaseType)
     {
         string request = TypeNameFormatter.Format(requestType);
-        string message = $"No handler is registered for request type '{request}'. Register a class implementing "
-            + $"{ContractNames.Handler(requestType, responseType)} with AddHandler<THandler>(). "
+        string contract = ContractNames.Handler(kind.HandlerContract, requestType, responseType);
+        string message = $"No handler is registered for {kind.RequestDescription} '{request}'. Register a class "
+            + $"implementing {contract} with AddHandler<THandler>(). "
             + "Handlers are matched to the exact runtime type of the request.";
 
         if (handledBaseType is not null)
@@ -82,6 +85,43 @@ internal static class DispatchErrors
     public static InvalidOperationException NullBehaviorTask(Type behaviorType, Type requestType)
     {
         return new($"Behavior '{TypeNameFormatter.Format(behaviorType)}' returned a null Task "
+            + $"while handling '{TypeNameFormatter.Format(requestType)}'.");
+    }
+
+    /// <summary>
+    /// Reports a behavior that read the stream returned by its continuation more than once.
+    /// </summary>
+    /// <param name="behaviorType">The behavior that received the continuation.</param>
+    /// <param name="requestType">The request type being handled.</param>
+    /// <returns>The exception to throw.</returns>
+    public static InvalidOperationException ContinuationStreamReadTwice(Type behaviorType, Type requestType)
+    {
+        return new($"Behavior '{TypeNameFormatter.Format(behaviorType)}' read the stream returned by its "
+            + $"continuation more than once while handling '{TypeNameFormatter.Format(requestType)}'. "
+            + "A continuation's stream may be read at most once.");
+    }
+
+    /// <summary>
+    /// Reports a stream handler that returned a null stream.
+    /// </summary>
+    /// <param name="handlerType">The handler type.</param>
+    /// <param name="requestType">The request type being handled.</param>
+    /// <returns>The exception to throw.</returns>
+    public static InvalidOperationException NullHandlerStream(Type handlerType, Type requestType)
+    {
+        return new($"Handler '{TypeNameFormatter.Format(handlerType)}' returned a null stream "
+            + $"while handling '{TypeNameFormatter.Format(requestType)}'.");
+    }
+
+    /// <summary>
+    /// Reports a stream behavior that returned a null stream.
+    /// </summary>
+    /// <param name="behaviorType">The behavior type.</param>
+    /// <param name="requestType">The request type being handled.</param>
+    /// <returns>The exception to throw.</returns>
+    public static InvalidOperationException NullBehaviorStream(Type behaviorType, Type requestType)
+    {
+        return new($"Behavior '{TypeNameFormatter.Format(behaviorType)}' returned a null stream "
             + $"while handling '{TypeNameFormatter.Format(requestType)}'.");
     }
 }

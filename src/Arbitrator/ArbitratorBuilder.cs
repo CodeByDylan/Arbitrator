@@ -35,8 +35,9 @@ public sealed class ArbitratorBuilder
     /// Registers a handler for every handler contract it implements.
     /// </summary>
     /// <typeparam name="THandler">
-    /// A concrete class implementing <see cref="IRequestHandler{TRequest, TResponse}"/> or
-    /// <see cref="IRequestHandler{TRequest}"/> one or more times.
+    /// A concrete class implementing <see cref="IRequestHandler{TRequest, TResponse}"/>,
+    /// <see cref="IRequestHandler{TRequest}"/>, or <see cref="IStreamRequestHandler{TRequest, TItem}"/> one or more
+    /// times.
     /// </typeparam>
     /// <returns>This builder.</returns>
     /// <exception cref="ArbitratorConfigurationException">
@@ -61,7 +62,8 @@ public sealed class ArbitratorBuilder
     /// it implements.
     /// </summary>
     /// <typeparam name="TBehavior">
-    /// A concrete class implementing <see cref="IPipelineBehavior{TRequest, TResponse}"/> one or more times.
+    /// A concrete class implementing <see cref="IPipelineBehavior{TRequest, TResponse}"/> or
+    /// <see cref="IStreamPipelineBehavior{TRequest, TItem}"/> one or more times.
     /// </typeparam>
     /// <returns>This builder.</returns>
     /// <exception cref="ArbitratorConfigurationException">
@@ -79,12 +81,13 @@ public sealed class ArbitratorBuilder
     }
 
     /// <summary>
-    /// Registers an open generic behavior at the next position in the pipeline order. It applies to every request
-    /// whose request and response types satisfy the runtime generic constraints of the behavior.
+    /// Registers an open generic behavior at the next position in the pipeline order. It applies to every request of
+    /// its kind whose request and response types satisfy the runtime generic constraints of the behavior.
     /// </summary>
     /// <param name="openBehaviorType">
     /// A generic type definition with two type parameters, such as <c>typeof(LoggingBehavior&lt;,&gt;)</c>, that
-    /// implements <see cref="IPipelineBehavior{TRequest, TResponse}"/> with those parameters in order.
+    /// implements <see cref="IPipelineBehavior{TRequest, TResponse}"/> or
+    /// <see cref="IStreamPipelineBehavior{TRequest, TItem}"/> with those parameters in order.
     /// </param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentNullException">

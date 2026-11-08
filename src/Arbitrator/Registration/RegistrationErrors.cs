@@ -51,8 +51,9 @@ internal static class RegistrationErrors
     /// <returns>The exception to throw.</returns>
     public static ArbitratorConfigurationException NotAHandler(Type handlerType)
     {
-        return new($"Type '{Name(handlerType)}' cannot be registered as a handler: it implements neither "
-            + "IRequestHandler<TRequest, TResponse> nor IRequestHandler<TRequest>.");
+        return new($"Type '{Name(handlerType)}' cannot be registered as a handler: it implements none of "
+            + "IRequestHandler<TRequest, TResponse>, IRequestHandler<TRequest>, or "
+            + "IStreamRequestHandler<TRequest, TItem>.");
     }
 
     /// <summary>
@@ -81,7 +82,7 @@ internal static class RegistrationErrors
         string contracts = string.Join(", ", requestContracts.Select(Name));
 
         return new($"Request type '{Name(requestType)}' implements more than one request contract ({contracts}). "
-            + "A request type must implement exactly one of IRequest or IRequest<TResponse>.");
+            + "A request type must implement exactly one of IRequest, IRequest<TResponse>, or IStreamRequest<TItem>.");
     }
 
     /// <summary>
@@ -128,7 +129,8 @@ internal static class RegistrationErrors
     public static ArbitratorConfigurationException InvalidOpenBehaviorShape(Type behaviorType)
     {
         return new($"Open behavior '{Name(behaviorType)}' must be a generic type definition with exactly two type "
-            + "parameters that implements IPipelineBehavior<TRequest, TResponse> using those parameters in order.");
+            + "parameters that implements exactly one of IPipelineBehavior<TRequest, TResponse> or "
+            + "IStreamPipelineBehavior<TRequest, TItem>, using those parameters in order.");
     }
 
     /// <summary>
@@ -149,7 +151,8 @@ internal static class RegistrationErrors
     public static ArbitratorConfigurationException NotABehavior(Type behaviorType)
     {
         return new($"Type '{Name(behaviorType)}' cannot be registered as a behavior: "
-            + "it does not implement IPipelineBehavior<TRequest, TResponse>.");
+            + "it implements neither IPipelineBehavior<TRequest, TResponse> nor "
+            + "IStreamPipelineBehavior<TRequest, TItem>.");
     }
 
     /// <summary>
@@ -184,8 +187,7 @@ internal static class RegistrationErrors
     public static ArbitratorConfigurationException ClosedBehaviorWithoutHandler(
         ClosedBehaviorRegistration registration)
     {
-        string contracts = string.Join(", ", registration.Contracts.Select(
-            contract => ContractNames.Behavior(contract.RequestType, contract.ResponseType)));
+        string contracts = string.Join(", ", registration.Contracts.Select(BehaviorContract));
 
         return new($"Behavior '{Name(registration.BehaviorType)}' implements {contracts}, "
             + "but no handler is registered for its request type.");
@@ -217,4 +219,14 @@ internal static class RegistrationErrors
     /// <param name="type">The type to format.</param>
     /// <returns>The formatted type name.</returns>
     private static string Name(Type type) => TypeNameFormatter.Format(type);
+
+    /// <summary>
+    /// Formats the behavior contract of a closed behavior registration.
+    /// </summary>
+    /// <param name="types">The type arguments and kind of the contract.</param>
+    /// <returns>The formatted contract.</returns>
+    private static string BehaviorContract(RequestResponseTypes types)
+    {
+        return ContractNames.Behavior(types.Kind.BehaviorContract, types.RequestType, types.ResponseType);
+    }
 }

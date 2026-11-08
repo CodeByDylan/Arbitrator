@@ -1,1 +1,9 @@
 #nullable enable
+Arbitrator.ISender.StreamAsync<TItem>(Arbitrator.IStreamRequest<TItem>! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+Arbitrator.IStreamPipelineBehavior<TRequest, TItem>
+Arbitrator.IStreamPipelineBehavior<TRequest, TItem>.HandleAsync(TRequest request, Arbitrator.StreamContinuation<TItem>! next, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+Arbitrator.IStreamRequest<TItem>
+Arbitrator.IStreamRequestHandler<TRequest, TItem>
+Arbitrator.IStreamRequestHandler<TRequest, TItem>.HandleAsync(TRequest request, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+Arbitrator.StreamContinuation<TItem>
+virtual Arbitrator.StreamContinuation<TItem>.Invoke(System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TItem>!

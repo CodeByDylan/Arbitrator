@@ -8,7 +8,7 @@ namespace Arbitrator.Registration;
 internal static class HandlerTypeInspector
 {
     /// <summary>
-    /// Validates a handler type and returns one contract for each handler interface it implements.
+    /// Validates a handler type and returns one contract for each request or stream handler interface it implements.
     /// </summary>
     /// <param name="handlerType">The handler type.</param>
     /// <returns>The handler contracts, one per handled request type.</returns>
@@ -27,7 +27,7 @@ internal static class HandlerTypeInspector
 
         HandlerContract[] contracts =
         [
-            .. GenericInterfaces.FindImplemented(handlerType, typeof(IRequestHandler<,>))
+            .. GenericInterfaces.FindPipelineContracts(handlerType, static kind => kind.HandlerContract)
                 .Select(handlerInterface => ToContract(handlerInterface, handlerType)),
         ];
 
@@ -47,12 +47,12 @@ internal static class HandlerTypeInspector
     /// <summary>
     /// Creates the contract described by a closed handler interface.
     /// </summary>
-    /// <param name="handlerInterface">A closed <c>IRequestHandler&lt;TRequest, TResponse&gt;</c> interface.</param>
+    /// <param name="handlerInterface">A closed handler interface of either pipeline kind.</param>
     /// <param name="handlerType">The handler type that implements the interface.</param>
     /// <returns>The handler contract.</returns>
-    private static HandlerContract ToContract(Type handlerInterface, Type handlerType)
+    private static HandlerContract ToContract(PipelineContract handlerInterface, Type handlerType)
     {
-        Type[] typeArguments = handlerInterface.GetGenericArguments();
-        return new HandlerContract(typeArguments[0], typeArguments[1], handlerType);
+        RequestResponseTypes types = handlerInterface.Types;
+        return new HandlerContract(types.RequestType, types.ResponseType, types.Kind, handlerType);
     }
 }

@@ -8,7 +8,7 @@ namespace Arbitrator.Registration;
 internal static class RequestTypeInspector
 {
     /// <summary>
-    /// Verifies that a request type is concrete and implements exactly one request contract.
+    /// Verifies that a request type is concrete and implements exactly one request contract of any pipeline kind.
     /// </summary>
     /// <param name="requestType">The request type handled by a handler.</param>
     /// <param name="handlerType">The handler type, named when the request type is abstract.</param>
@@ -21,7 +21,11 @@ internal static class RequestTypeInspector
             throw RegistrationErrors.AbstractRequestType(requestType, handlerType);
         }
 
-        Type[] requestContracts = GenericInterfaces.FindImplemented(requestType, typeof(IRequest<>));
+        Type[] requestContracts =
+        [
+            .. GenericInterfaces.FindPipelineContracts(requestType, static kind => kind.RequestContract)
+                .Select(requestContract => requestContract.Contract),
+        ];
 
         if (requestContracts.Length > 1)
         {
