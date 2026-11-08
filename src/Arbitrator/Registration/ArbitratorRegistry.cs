@@ -15,7 +15,7 @@ internal sealed class ArbitratorRegistry
 {
     private readonly Lock _gate = new();
     private readonly WeakReference<IServiceCollection> _owner;
-    private readonly Registrations _registrations;
+    private Registrations _registrations;
     private bool _isFrozen;
     private DispatchMaps? _dispatchMaps;
 
@@ -87,17 +87,7 @@ internal sealed class ArbitratorRegistry
         lock (_gate)
         {
             EnsureNotFrozen();
-            Pipelines.EnsureHandlerTypeIsNew(handlerType);
-            IReadOnlyList<HandlerContract> contracts = HandlerTypeInspector.GetContracts(handlerType);
-            Pipelines.EnsureRequestTypesHaveNoHandler(contracts);
-            PipelinePlan[] plans = [.. contracts.Select(_registrations.PlanPipeline)];
-
-            Pipelines.AddRange(plans);
-            return
-            [
-                ComponentDescriptors.ForRequestComponent(handlerType),
-                .. plans.SelectMany(CreateOpenBehaviorDescriptors),
-            ];
+            return _registrations.RegisterHandler(handlerType);
         }
     }
 
@@ -164,12 +154,38 @@ internal sealed class ArbitratorRegistry
         lock (_gate)
         {
             EnsureNotFrozen();
-            _registrations.NotificationHandlers.EnsureHandlerTypeIsNew(handlerType);
-            IReadOnlyList<NotificationHandlerContract> contracts =
-                NotificationHandlerTypeInspector.GetContracts(handlerType);
+            return _registrations.RegisterNotificationHandler(handlerType);
+        }
+    }
 
-            _registrations.NotificationHandlers.Add(handlerType, contracts);
-            return [ComponentDescriptors.ForNotificationHandler(handlerType)];
+    /// <summary>
+    /// Registers handlers discovered in an assembly as one unit: either every handler is registered, or none is.
+    /// </summary>
+    /// <param name="handlers">The discovered handlers.</param>
+    /// <returns>The descriptors for every registered handler and for the open behaviors that now apply.</returns>
+    /// <exception cref="ArbitratorConfigurationException">A registration is invalid.</exception>
+    [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
+    [RequiresUnreferencedCode(RegistrationReflection.ScanningMessage)]
+    public IReadOnlyList<ServiceDescriptor> RegisterDiscoveredHandlers(DiscoveredHandlers handlers)
+    {
+        lock (_gate)
+        {
+            EnsureNotFrozen();
+            Registrations candidate = _registrations.Copy();
+            List<ServiceDescriptor> descriptors = [];
+
+            foreach (Type handlerType in handlers.RequestHandlerTypes)
+            {
+                descriptors.AddRange(candidate.RegisterHandler(handlerType));
+            }
+
+            foreach (Type handlerType in handlers.NotificationHandlerTypes)
+            {
+                descriptors.AddRange(candidate.RegisterNotificationHandler(handlerType));
+            }
+
+            _registrations = candidate;
+            return descriptors;
         }
     }
 
@@ -199,18 +215,5 @@ internal sealed class ArbitratorRegistry
         {
             throw RegistrationErrors.RegistrationFrozen();
         }
-    }
-
-    /// <summary>
-    /// Creates the descriptors for the closed types that open behaviors contribute to a pipeline.
-    /// </summary>
-    /// <param name="plan">The pipeline plan.</param>
-    /// <returns>The descriptors.</returns>
-    [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
-    private static IEnumerable<ServiceDescriptor> CreateOpenBehaviorDescriptors(PipelinePlan plan)
-    {
-        return plan.Behaviors
-            .Where(behavior => behavior.Registration is OpenBehaviorRegistration)
-            .Select(behavior => ComponentDescriptors.ForRequestComponent(behavior.ClosedType));
     }
 }

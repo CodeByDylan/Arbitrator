@@ -26,4 +26,11 @@ internal static class RegistrationReflection
     public const string UnreferencedCodeMessage =
         "Arbitrator inspects the interfaces of request types and closes generic behavior types at runtime, which "
         + "trimming cannot analyze.";
+
+    /// <summary>
+    /// Explains why assembly scanning may be incompatible with trimming.
+    /// </summary>
+    public const string ScanningMessage =
+        "Arbitrator discovers handler types in an assembly at runtime and inspects the interfaces of request types, "
+        + "which trimming cannot analyze; handler types that nothing else references can be removed.";
 }

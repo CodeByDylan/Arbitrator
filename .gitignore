@@ -7,3 +7,6 @@ riderModule.iml
 /_ReSharper.Caches/
 TestResults/
 artifacts/
+
+# common local files (Dutchy specific)
+verification-report.md

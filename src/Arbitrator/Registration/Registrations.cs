@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Arbitrator.Dispatch;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Arbitrator.Registration;
 
@@ -67,6 +68,50 @@ internal sealed class Registrations
     }
 
     /// <summary>
+    /// Registers a handler type for every handler contract it implements, after validating it against the
+    /// registrations so far.
+    /// </summary>
+    /// <param name="handlerType">The handler type.</param>
+    /// <returns>The descriptors for the handler and for the open behaviors that now apply to its requests.</returns>
+    /// <exception cref="ArbitratorConfigurationException">The registration is invalid.</exception>
+    [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
+    [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
+    public IReadOnlyList<ServiceDescriptor> RegisterHandler(
+        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type handlerType)
+    {
+        Pipelines.EnsureHandlerTypeIsNew(handlerType);
+        IReadOnlyList<HandlerContract> contracts = HandlerTypeInspector.GetContracts(handlerType);
+        Pipelines.EnsureRequestTypesHaveNoHandler(contracts);
+        PipelinePlan[] plans = [.. contracts.Select(PlanPipeline)];
+
+        Pipelines.AddRange(plans);
+        return
+        [
+            ComponentDescriptors.ForRequestComponent(handlerType),
+            .. plans.SelectMany(CreateOpenBehaviorDescriptors),
+        ];
+    }
+
+    /// <summary>
+    /// Registers a notification handler type for every notification contract it implements, after every notification
+    /// handler registered so far.
+    /// </summary>
+    /// <param name="handlerType">The notification handler type.</param>
+    /// <returns>The descriptor for the handler.</returns>
+    /// <exception cref="ArbitratorConfigurationException">The registration is invalid.</exception>
+    [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
+    public IReadOnlyList<ServiceDescriptor> RegisterNotificationHandler(
+        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type handlerType)
+    {
+        NotificationHandlers.EnsureHandlerTypeIsNew(handlerType);
+        IReadOnlyList<NotificationHandlerContract> contracts =
+            NotificationHandlerTypeInspector.GetContracts(handlerType);
+
+        NotificationHandlers.Add(handlerType, contracts);
+        return [ComponentDescriptors.ForNotificationHandler(handlerType)];
+    }
+
+    /// <summary>
     /// Plans the pipeline of a new handler contract from the behaviors registered so far.
     /// </summary>
     /// <param name="contract">The handler contract.</param>
@@ -108,5 +153,18 @@ internal sealed class Registrations
         {
             placement.Plan.Append(placement.Behavior);
         }
+    }
+
+    /// <summary>
+    /// Creates the descriptors for the closed types that open behaviors contribute to a pipeline.
+    /// </summary>
+    /// <param name="plan">The pipeline plan.</param>
+    /// <returns>The descriptors.</returns>
+    [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
+    private static IEnumerable<ServiceDescriptor> CreateOpenBehaviorDescriptors(PipelinePlan plan)
+    {
+        return plan.Behaviors
+            .Where(behavior => behavior.Registration is OpenBehaviorRegistration)
+            .Select(behavior => ComponentDescriptors.ForRequestComponent(behavior.ClosedType));
     }
 }

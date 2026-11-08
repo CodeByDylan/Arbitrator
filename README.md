@@ -13,7 +13,8 @@ is small enough to read in one sitting. `DESIGN.md`, in the root of the source r
 - **Requests with and without a response.** Handlers of no-response requests return a plain `Task`.
 - **One pipeline abstraction.** Behaviors run in registration order, and the first registered is the outermost.
 - **Notifications.** Zero or more handlers per notification type, run one after another in registration order.
-- **Explicit registration** with actionable configuration errors. There is no assembly scanning.
+- **Explicit registration** with actionable configuration errors, plus opt-in assembly scanning for handlers. Behaviors
+  are always registered explicitly.
 - **The caller's scope.** Arbitrator never creates a scope, caches an instance, or disposes anything.
 - **Unwrapped exceptions.** Exceptions reach the caller as the same instance, and cancellation is checked once and
   then forwarded.
@@ -142,6 +143,41 @@ await publisher.PublishAsync(new CustomerDeactivated(customer.Id, reason), cance
 - **In-process only.** There is no parallel or fire-and-forget publishing, no durability, and no outbox. Request
   behaviors never wrap notification handlers.
 
+## Assembly scanning
+
+Instead of listing every handler, you can register all handlers of an assembly in one call. Scanning is opt-in, and
+each call names exactly one assembly:
+
+```csharp
+builder.Services.AddArbitrator(arbitrator => arbitrator
+    .AddOpenBehavior(typeof(LoggingBehavior<,>))
+    .AddHandlersFromAssemblyContaining<GetCustomerHandler>());
+```
+
+- **What is registered.** Every concrete, non-generic class that implements `IRequestHandler<,>`,
+  `IRequestHandler<>`, or `INotificationHandler<>`, whatever its visibility, including `internal` and nested classes.
+  Every handler class in the assembly becomes reachable through `ISender` or `IPublisher`, so keep test-only or
+  experimental handlers out of scanned assemblies, or exclude them with a filter.
+- **Behaviors stay explicit.** A scan never registers behaviors, because their registration order is the pipeline
+  order.
+- **Order.** Scanned handlers are registered in ordinal order of their full type names. Scanned notification handlers
+  therefore run in name order, after any handlers registered before the scan. To control the order of particular
+  handlers, exclude them with a filter and register them explicitly.
+- **Filter.** Both methods have an overload that takes a `Func<Type, bool>`. It sees each handler type once, and only
+  the types it accepts are registered:
+
+  ```csharp
+  arbitrator.AddHandlersFromAssemblyContaining<GetCustomerHandler>(
+      type => type.Namespace?.StartsWith("Contoso.Customers", StringComparison.Ordinal) == true);
+  ```
+
+- **Same rules as explicit registration.** Every scanned type is validated as `AddHandler` or
+  `AddNotificationHandler` would validate it. A type that is already registered is an error, so scanning the same
+  assembly twice fails, and so does registering a type explicitly that a scan also finds.
+- **All or nothing.** If any type fails, the scan registers nothing. A scan that finds no handlers, a filter that
+  excludes all of them, or an assembly whose types (or a handler's attributes) can't be loaded is a configuration error
+  that names the assembly.
+
 ## The contract in brief
 
 | Situation | Behavior |
@@ -160,6 +196,7 @@ await publisher.PublishAsync(new CustomerDeactivated(customer.Id, reason), cance
 | Disposal | The scope disposes handlers and behaviors when it ends |
 | Registration after the provider was built | `ArbitratorConfigurationException` when that provider resolves `ISender` or `IPublisher` |
 | Registration on a read-only collection | `ArbitratorConfigurationException`, and nothing is registered |
+| A scanned type is invalid or already registered | `ArbitratorConfigurationException`, and the scan registers nothing |
 
 Turn on `ValidateOnBuild` and `ValidateScopes` for your container. Container validation then checks the dependencies
 of every handler, notification handler, and behavior that applies to a registered request. It also catches a
@@ -172,7 +209,9 @@ don't return them to clients: they reveal your application's namespaces and type
 
 Registration closes generic types at runtime and inspects request types through reflection. For that reason,
 `AddHandler` and `AddOpenBehavior` are marked `RequiresDynamicCode` and `RequiresUnreferencedCode`,
-`AddNotificationHandler` is marked `RequiresDynamicCode`, and Native AOT isn't supported yet.
+`AddNotificationHandler` is marked `RequiresDynamicCode`, and Native AOT isn't supported yet. The assembly scanning
+methods carry both attributes: they discover types at runtime, and trimming can remove handler types that nothing else
+references.
 
 ## License
 
