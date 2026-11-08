@@ -37,8 +37,8 @@ internal sealed class RequestInvoker<TRequest, TResponse> : RequestInvoker<TResp
     {
         var typedRequest = (TRequest)request;
         IPipelineBehavior<TRequest, TResponse>[] behaviors =
-            ComponentResolver.ResolveBehaviors<IPipelineBehavior<TRequest, TResponse>>(services, BehaviorTypes);
-        var handler = ComponentResolver.Resolve<IRequestHandler<TRequest, TResponse>>(services, HandlerType);
+            ResolveBehaviors<IPipelineBehavior<TRequest, TResponse>>(services);
+        var handler = ResolveHandler<IRequestHandler<TRequest, TResponse>>(services);
 
         if (behaviors.Length == 0)
         {

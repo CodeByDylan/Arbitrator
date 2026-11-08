@@ -3,7 +3,7 @@
     <RootNamespace>Arbitrator</RootNamespace>
     <IsPackable>true</IsPackable>
     <IsAotCompatible>true</IsAotCompatible>
-    <VersionPrefix>0.5.0</VersionPrefix>
+    <VersionPrefix>0.6.0</VersionPrefix>
     <VersionSuffix>preview.1</VersionSuffix>
     <PackageId>Arbitrator</PackageId>
     <Authors>Dylan de Beer</Authors>

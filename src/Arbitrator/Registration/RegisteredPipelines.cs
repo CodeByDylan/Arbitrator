@@ -95,21 +95,13 @@ internal sealed class RegisteredPipelines
     }
 
     /// <summary>
-    /// Rejects closed behaviors that apply to no registered request.
+    /// Determines whether a behavior registration is part of any request pipeline.
     /// </summary>
-    /// <param name="registrations">The closed behavior registrations.</param>
-    /// <exception cref="ArbitratorConfigurationException">
-    /// A closed behavior applies to no registered request.
-    /// </exception>
-    public void EnsureEveryClosedBehaviorApplies(IEnumerable<ClosedBehaviorRegistration> registrations)
+    /// <param name="registration">The behavior registration.</param>
+    /// <returns><see langword="true"/> when some pipeline contains the registration.</returns>
+    public bool Contains(BehaviorRegistration registration)
     {
-        foreach (ClosedBehaviorRegistration registration in registrations)
-        {
-            if (!_plansByRequestType.Values.Any(plan => plan.Contains(registration)))
-            {
-                throw RegistrationErrors.ClosedBehaviorWithoutHandler(registration);
-            }
-        }
+        return _plansByRequestType.Values.Any(plan => plan.Contains(registration));
     }
 
     /// <summary>

@@ -40,6 +40,18 @@ internal static class ContractNames
     }
 
     /// <summary>
+    /// Formats the notification behavior contract for a notification type.
+    /// </summary>
+    /// <param name="notificationType">The notification type.</param>
+    /// <returns>
+    /// The formatted contract, such as <c>INotificationBehavior&lt;Contoso.CustomerArchived&gt;</c>.
+    /// </returns>
+    public static string NotificationBehavior(Type notificationType)
+    {
+        return $"INotificationBehavior<{TypeNameFormatter.Format(notificationType)}>";
+    }
+
+    /// <summary>
     /// Formats a two-parameter contract closed over a request type and a response or item type.
     /// </summary>
     /// <param name="contractDefinition">The generic definition of the contract.</param>

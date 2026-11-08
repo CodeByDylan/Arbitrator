@@ -40,16 +40,6 @@ internal sealed class ArbitratorRegistry
     }
 
     /// <summary>
-    /// Gets the registered request pipelines.
-    /// </summary>
-    private RegisteredPipelines Pipelines => _registrations.Pipelines;
-
-    /// <summary>
-    /// Gets the registered behaviors.
-    /// </summary>
-    private RegisteredBehaviors Behaviors => _registrations.Behaviors;
-
-    /// <summary>
     /// Determines whether the registry belongs to a service collection, rather than having been copied into it
     /// together with the descriptors of another collection.
     /// </summary>
@@ -95,7 +85,7 @@ internal sealed class ArbitratorRegistry
     /// Registers a closed behavior at the next registration position.
     /// </summary>
     /// <param name="behaviorType">The closed behavior type.</param>
-    /// <returns>The descriptor for the behavior.</returns>
+    /// <returns>The descriptors for the behavior.</returns>
     /// <exception cref="ArbitratorConfigurationException">The registration is invalid.</exception>
     public IReadOnlyList<ServiceDescriptor> RegisterClosedBehavior(
         [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type behaviorType)
@@ -103,12 +93,7 @@ internal sealed class ArbitratorRegistry
         lock (_gate)
         {
             EnsureNotFrozen();
-            Behaviors.EnsureTypeIsNew(behaviorType);
-            ClosedBehaviorRegistration registration =
-                BehaviorTypeInspector.InspectClosed(behaviorType, Behaviors.NextPosition);
-
-            _registrations.AppendBehavior(registration, Pipelines.PlaceClosedBehavior(registration));
-            return [ComponentDescriptors.ForRequestComponent(behaviorType)];
+            return _registrations.RegisterClosedBehavior(behaviorType);
         }
     }
 
@@ -116,7 +101,7 @@ internal sealed class ArbitratorRegistry
     /// Registers an open behavior at the next registration position.
     /// </summary>
     /// <param name="behaviorType">The generic type definition of the behavior.</param>
-    /// <returns>The descriptors for the closed behavior types that apply to registered requests.</returns>
+    /// <returns>The descriptors for the closed behavior types that now apply.</returns>
     /// <exception cref="ArbitratorConfigurationException">The registration is invalid.</exception>
     [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
     [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
@@ -126,17 +111,7 @@ internal sealed class ArbitratorRegistry
         lock (_gate)
         {
             EnsureNotFrozen();
-            Behaviors.EnsureTypeIsNew(behaviorType);
-            OpenBehaviorRegistration registration =
-                BehaviorTypeInspector.InspectOpen(behaviorType, Behaviors.NextPosition);
-            List<BehaviorPlacement> placements = Pipelines.PlaceOpenBehavior(registration);
-
-            _registrations.AppendBehavior(registration, placements);
-            return
-            [
-                .. placements.Select(
-                    placement => ComponentDescriptors.ForRequestComponent(placement.Behavior.ClosedType)),
-            ];
+            return _registrations.RegisterOpenBehavior(behaviorType);
         }
     }
 
@@ -145,9 +120,10 @@ internal sealed class ArbitratorRegistry
     /// handler registered so far.
     /// </summary>
     /// <param name="handlerType">The notification handler type.</param>
-    /// <returns>The descriptor for the handler.</returns>
+    /// <returns>The descriptors for the handler and for the open behaviors that now wrap it.</returns>
     /// <exception cref="ArbitratorConfigurationException">The registration is invalid.</exception>
     [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
+    [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
     public IReadOnlyList<ServiceDescriptor> RegisterNotificationHandler(
         [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type handlerType)
     {

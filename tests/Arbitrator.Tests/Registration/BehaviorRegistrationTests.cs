@@ -105,7 +105,8 @@ public sealed class BehaviorRegistrationTests
         ArbitratorConfigurationException exception = Expect.ThrowsExactly<ArbitratorConfigurationException>(
             () => services.AddArbitrator(arbitrator => arbitrator.AddOpenBehavior(openBehaviorType)));
 
-        await Assert.That(exception.Message).Contains("must be a generic type definition with exactly two type");
+        await Assert.That(exception.Message).Contains(
+            "must be a generic type definition that implements exactly one behavior contract");
     }
 
     [Test]
@@ -131,7 +132,8 @@ public sealed class BehaviorRegistrationTests
             () => services.AddArbitrator(arbitrator => arbitrator.AddBehavior<PingHandler>()));
 
         await Assert.That(exception.Message).Contains(
-            "implements neither IPipelineBehavior<TRequest, TResponse> nor IStreamPipelineBehavior<TRequest, TItem>");
+            "implements none of IPipelineBehavior<TRequest, TResponse>, IStreamPipelineBehavior<TRequest, TItem>, "
+            + "or INotificationBehavior<TNotification>");
     }
 
     [Test]

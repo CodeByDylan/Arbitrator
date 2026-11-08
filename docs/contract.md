@@ -18,7 +18,7 @@ It doesn't repeat what other sources already own:
 These are the opinions that set Arbitrator apart from other mediators:
 
 1. **One way to do each thing.** Each request has one handler, there's one pipeline abstraction for each kind of
-   request, one registration entry point, and one ordering rule.
+   message, one registration entry point, and one ordering rule.
 2. **Explicit over discovered.** Only types named in `AddArbitrator`, or handlers found by a scan of an assembly named
    there, take part in dispatch. Scanning is opt-in, each call names its assembly, and behaviors are never discovered.
    `IRequestHandler<,>` services registered directly on the `IServiceCollection` are ignored.
@@ -54,8 +54,9 @@ compatibility. Assembly scanning as the default registration style.
 The contracts live in the `Arbitrator` namespace: `IRequest<TResponse>`, `IRequest`, `IRequestHandler<TRequest,
 TResponse>`, `IRequestHandler<TRequest>`, `IPipelineBehavior<TRequest, TResponse>`, `RequestContinuation<TResponse>`,
 `IStreamRequest<TItem>`, `IStreamRequestHandler<TRequest, TItem>`, `IStreamPipelineBehavior<TRequest, TItem>`,
-`StreamContinuation<TItem>`, `ISender`, `INotification`, `INotificationHandler<TNotification>`, `IPublisher`, `Unit`,
-and `ArbitratorConfigurationException`. The registration description (§5.6) adds `ArbitratorRegistrations`,
+`StreamContinuation<TItem>`, `ISender`, `INotification`, `INotificationHandler<TNotification>`,
+`INotificationBehavior<TNotification>`, `NotificationContinuation`, `IPublisher`, `Unit`, and
+`ArbitratorConfigurationException`. The registration description (§5.6) adds `ArbitratorRegistrations`,
 `RequestRegistration`, and `NotificationRegistration`, which are read-only data. The contracts' shape follows these
 rules:
 
@@ -66,7 +67,8 @@ rules:
   `SendAsync<object>(getCustomer)` compile against a handler that returns `CustomerDto`.
 - **The `TRequest : IRequest<TResponse>` constraint on handlers and behaviors.** A handler or closed behavior whose
   response type doesn't match its request is a compile error. Open behaviors must restate the constraint, and the
-  compiler enforces that (CS0314). The stream contracts carry `TRequest : IStreamRequest<TItem>` in the same way.
+  compiler enforces that (CS0314). The stream contracts carry `TRequest : IStreamRequest<TItem>` in the same way, and
+  the notification contracts carry `TNotification : INotification`.
 - **Bridging no-response handlers to `Unit`.** `IRequest` inherits `IRequest<Unit>`, and `IRequestHandler<TRequest>`
   inherits `IRequestHandler<TRequest, Unit>`. It hides the base `HandleAsync` with `new` and implements it explicitly
   as a default interface method, so a class implementing `IRequestHandler<DeactivateCustomer>` writes only
@@ -91,9 +93,10 @@ namespace so that the implicit usings of ASP.NET Core and Worker projects find i
 - `AddHandler<THandler>()` registers every closed `IRequestHandler<,>` and `IStreamRequestHandler<,>` contract that
   `THandler` implements.
 - `AddBehavior<TBehavior>()` registers a closed behavior, which applies to every `IPipelineBehavior<TRequest,
-  TResponse>` and `IStreamPipelineBehavior<TRequest, TItem>` it implements.
+  TResponse>`, `IStreamPipelineBehavior<TRequest, TItem>`, and `INotificationBehavior<TNotification>` it implements.
 - `AddOpenBehavior(typeof(X<,>))` registers an open-generic behavior, which implements exactly one of
-  `IPipelineBehavior<,>` and `IStreamPipelineBehavior<,>`.
+  `IPipelineBehavior<,>` and `IStreamPipelineBehavior<,>` with two type parameters, or `INotificationBehavior<>` with
+  one, for example `AddOpenBehavior(typeof(HandlerTimingBehavior<>))`.
 - `AddNotificationHandler<THandler>()` registers every closed `INotificationHandler<>` contract `THandler` implements,
   after every notification handler registered before it. Any number of handler types may handle one notification
   type.
@@ -150,9 +153,11 @@ throw.
 
 ### 4.2 Behavior applicability and order
 
-A behavior applies only to handler contracts of its own kind: `IPipelineBehavior<,>` to `IRequestHandler<,>`, and
-`IStreamPipelineBehavior<,>` to `IStreamRequestHandler<,>`. Within its kind, it applies to a handler contract
-(`TRequest`, `TResponse`) as follows:
+A behavior applies only to handlers of its own kind: `IPipelineBehavior<,>` to `IRequestHandler<,>`,
+`IStreamPipelineBehavior<,>` to `IStreamRequestHandler<,>`, and `INotificationBehavior<>` to
+`INotificationHandler<>`. A notification behavior applies to a notification type as a request behavior applies to a
+handler contract, with the notification type as its only type argument. Within its kind, a behavior applies to a
+handler contract (`TRequest`, `TResponse`) as follows:
 
 - **A closed behavior** applies when it implements the behavior contract for (`TRequest`, `TResponse`) exactly.
 - **An open behavior** applies when closing it over (`TRequest`, `TResponse`) passes the runtime's generic-constraint
@@ -161,7 +166,7 @@ A behavior applies only to handler contracts of its own kind: `IPipelineBehavior
   `unmanaged` is enforced only as `struct`, so applicability ignores all of these.
 
 Applicable behaviors run in one global registration order, across all `AddArbitrator` calls, with open and closed
-behaviors interleaved. Behaviors of both kinds share that order and its positions. The first registered is the
+behaviors interleaved. Behaviors of every kind share that order and its positions. The first registered is the
 outermost. The order of handler calls relative to behavior calls doesn't matter.
 
 For example, suppose these registrations are made in this order, across two `AddArbitrator` calls:
@@ -197,16 +202,24 @@ the innermost behavior outward, and the caller receives the handler's exception 
 - **Steps.**
   1. A null notification faults the task with `ArgumentNullException`.
   2. If no handler is registered for the runtime type, publishing succeeds immediately, without inspecting the token.
-  3. Otherwise the token is checked, then every handler is resolved from the publisher's scope before the first runs.
-  4. The token is checked again before each handler.
-  5. A handler returning a null task is reported by name. The first exception stops publication and reaches the
-     caller unwrapped, and handlers that already ran keep their effects.
-- **Context.** After every handler except the last, Arbitrator resumes on the caller's captured context, so every
-  handler starts on the context the caller published from. It doesn't return to that context after the last handler,
-  so a single-handler publish can't deadlock a caller that blocks on it. Publishing must be awaited: with several
-  handlers, a caller blocking on a single-threaded context deadlocks.
-- **No pipeline.** Request behaviors never wrap notification handlers, and there is no notification behavior
-  abstraction.
+  3. Otherwise the token is checked. Then, for each handler in run order, its applicable notification behaviors are
+     resolved, outermost first, followed by the handler, all from the publisher's scope and before anything runs.
+     Each handler call gets its own behavior instances.
+  4. The token is checked again before each handler's chain, that is, before its outermost behavior.
+  5. The outermost component of the chain is called with the notification, the handler's implementation type (for
+     behaviors), and the token. A behavior or handler returning a null task is reported by name. The first exception
+     that reaches the outermost component stops publication and reaches the caller unwrapped, and handlers that
+     already ran keep their effects.
+- **Notification behaviors.** An `INotificationBehavior<TNotification>` wraps each handler call separately: with
+  three handlers, the chain runs three times. A behavior that doesn't invoke `next` skips its handler, which was
+  already constructed, and publication continues. A behavior that catches its handler's exception and completes
+  normally lets publication continue; Arbitrator imposes nothing. `next` may be invoked at most once. Request
+  behaviors never wrap notification handlers, and notification behaviors never wrap request or stream handlers.
+- **Context.** After every handler's chain except the last, Arbitrator resumes on the caller's captured context, so
+  the outermost component of every chain starts on the context the caller published from. Where inner components
+  start depends on how the behaviors await. Arbitrator doesn't return to that context after the last chain, so a
+  single-handler publish can't deadlock a caller that blocks on it. Publishing must be awaited: with several handlers,
+  a caller blocking on a single-threaded context deadlocks.
 
 ### 4.4 Assembly scanning
 
@@ -260,8 +273,8 @@ A handler or behavior may inject `ISender` or `IPublisher` and send or publish a
 Native AOT isn't supported. Registration inspects interfaces through reflection and closes generic types at runtime,
 some over value types such as `Unit`, so explicit registration isn't evidence of AOT compatibility.
 
-- `AddHandler` and `AddOpenBehavior` carry `RequiresDynamicCode` and `RequiresUnreferencedCode`.
-- `AddNotificationHandler` carries `RequiresDynamicCode`.
+- `AddHandler`, `AddOpenBehavior`, and `AddNotificationHandler` carry `RequiresDynamicCode` and
+  `RequiresUnreferencedCode`. `AddNotificationHandler` closes open notification behaviors over its notification types.
 - The four scanning methods carry both: they enumerate an assembly's types at runtime, and trimming can remove handler
   types that nothing else references.
 - `AddBehavior` carries neither.
@@ -315,6 +328,7 @@ The library builds with `IsAotCompatible`, no trimming or AOT analyzer warnings,
 | Closed behaviors of either kind | Transient | Keyed, registered as their implementation type |
 | Open behaviors of either kind | Transient | Keyed. One closed descriptor per applicable registered request of the same kind |
 | Notification handlers | Transient | Keyed under a separate private key, registered as their implementation type. A class registered as both a request handler and a notification handler has one registration per role |
+| Notification behaviors | Transient | Keyed under a third private key, registered as their implementation type. A closed behavior gets one descriptor; an open one gets one closed descriptor per notification type with handlers that it applies to |
 
 A handler that implements several contracts has one descriptor and still gets a new instance for every send. If the
 application also registers a handler type itself, for example `AddScoped<GetCustomerHandler>()`, that registration is
@@ -366,7 +380,7 @@ The DI container owns the disposal of services, and Arbitrator never calls `Disp
 | The same handler type registered twice | Error |
 | The same notification handler type registered twice | Error |
 | The same behavior type registered twice, open or closed | Error |
-| A closed behavior type that equals the instantiation of a registered open behavior for some registered request | Error, because the behavior would run twice |
+| A closed behavior type that equals the instantiation of a registered open behavior for some registered request, or for some notification type with handlers | Error, because the behavior would run twice |
 
 **Other cases**
 
@@ -389,10 +403,10 @@ The DI container owns the disposal of services, and Arbitrator never calls `Disp
 
 | Stage | What is detected | What can't be detected here |
 | --- | --- | --- |
-| **Registration** (each builder call, atomic) | Null arguments. A read-only collection. Invalid handler or behavior shapes, including value-type, generic-parameter, and partially closed behavior types. Abstract request and notification types, and request types with more than one request contract of any kind. Open behaviors implementing both pipeline contracts. All duplicate cases. Scanning failures (§4.4). Calls made after freezing | Constructor dependencies. Whether the application has requests without handlers |
-| **Container validation** (`ValidateOnBuild`, `ValidateScopes`) | Unresolvable constructor dependencies of every handler, notification handler, and behavior instantiation that applies to a registered request, because all of them are closed keyed descriptors. Singletons that depend on `ISender` or `IPublisher`. Lifetime violations inside application services | Exceptions thrown by constructors. Arbitrator's own cross-registration rules |
-| **First `ISender` or `IPublisher` resolution** in a provider | Closed behaviors that match no registered handler contract. Handlers and behaviors registered after the provider was built | Requests that are never registered |
-| **Dispatch**, or the first `MoveNextAsync` of a stream read | Null request or notification. A request type with no handler, including derived types of handled requests. Constructor exceptions. A continuation invoked twice, or its stream read twice. Null `Task` or stream results | n/a |
+| **Registration** (each builder call, atomic) | Null arguments. A read-only collection. Invalid handler or behavior shapes, including value-type, generic-parameter, and partially closed behavior types. Abstract request and notification types, and request types with more than one request contract of any kind. Open behaviors implementing more than one behavior contract, or with the wrong number of type parameters for their contract. All duplicate cases. Scanning failures (§4.4). Calls made after freezing | Constructor dependencies. Whether the application has requests without handlers |
+| **Container validation** (`ValidateOnBuild`, `ValidateScopes`) | Unresolvable constructor dependencies of every handler, notification handler, and behavior instantiation that applies to a registered request or notification, because all of them are closed keyed descriptors. Singletons that depend on `ISender` or `IPublisher`. Lifetime violations inside application services | Exceptions thrown by constructors. Arbitrator's own cross-registration rules |
+| **First `ISender`, `IPublisher`, or `ArbitratorRegistrations` resolution** in a provider | Closed behaviors that match no registered handler contract and no notification type with handlers. Handlers and behaviors registered after the provider was built | Requests that are never registered |
+| **Dispatch**, publishing, or the first `MoveNextAsync` of a stream read | Null request or notification. A request type with no handler, including derived types of handled requests. Constructor exceptions. A continuation invoked twice, or its stream read twice. Null `Task` or stream results | n/a |
 | **Never** | Arbitrator can't prove that every request type in the application has a handler; applications can check it with `ArbitratorRegistrations` (§5.6). It doesn't check that handlers honor cancellation, or that a non-nullable `TResponse` is actually non-null | |
 
 **Recommended application-side test:** build the real container with `ValidateOnBuild` and `ValidateScopes` enabled,
@@ -418,7 +432,8 @@ the test instead of the first send.
   - `BehaviorTypes`: the closed behavior types dispatch runs for the request, outermost first. Open behaviors appear
     as the instantiation that runs
 - **`Notifications`.** One `NotificationRegistration` per notification type with at least one handler, with its
-  `HandlerTypes` in run order.
+  `HandlerTypes` in run order and its `BehaviorTypes`, the closed notification behaviors that wrap each handler,
+  outermost first.
 - **Order.** Both lists are sorted by the ordinal order of `Type.FullName`. Within an entry, types keep dispatch order.
 - **Read-only.** The lists are immutable: changing one through a mutable interface such as `IList<T>` throws
   `NotSupportedException`. The types have no public constructors and no value equality. Reading the description
@@ -464,7 +479,7 @@ passes values or exceptions through.
 | 29 | `SendAsync` called without being awaited | Never throws synchronously. Every failure in this table appears through the returned `Task` | Arbitrator |
 | 30 | Notification with no handlers for its runtime type | Publishing succeeds. Nothing is resolved and the token isn't inspected | Arbitrator |
 | 31 | Several notification handlers | They run sequentially in registration order, each awaited before the next | Arbitrator |
-| 32 | A notification handler throws | The same exception instance reaches the caller. Later handlers don't run; earlier handlers keep their effects | Forwarded |
+| 32 | A notification handler throws | The same exception instance reaches the caller. Later handlers don't run, unless a notification behavior catches the exception (row 67); earlier handlers keep their effects | Forwarded |
 | 33 | Token canceled before or between notification handlers | The publish is canceled with the caller's token, and the remaining handlers don't run | **Checked by Arbitrator** |
 | 34 | Notification derived from a handled notification type | Reaches no handlers, and publishing succeeds | Arbitrator |
 | 35 | Publishing or sending from inside a notification handler | Permitted, in the same scope, with no recursion detection | Arbitrator |
@@ -492,9 +507,19 @@ passes values or exceptions through.
 | 57 | Resolving `ArbitratorRegistrations` | A singleton, from the root provider or any scope, describing what that provider dispatches | Arbitrator |
 | 58 | Resolving `ArbitratorRegistrations` before `ISender` | The registrations freeze, and the checks of the first `ISender` or `IPublisher` resolution run, failing with the same exceptions | Arbitrator |
 | 59 | Request entries | One per request type with a handler: request type, response or item type (`Unit` for `IRequest`), stream flag, handler type, and the closed behavior types that run, outermost first | Arbitrator |
-| 60 | Notification entries | One per notification type with handlers, listing them in run order | Arbitrator |
+| 60 | Notification entries | One per notification type with handlers, listing them in run order, and the closed notification behaviors that wrap each, outermost first | Arbitrator |
 | 61 | Order of the entries | Both lists are sorted by ordinal full type name | Arbitrator |
 | 62 | Changing or reading the description | The lists are immutable, and reading them constructs no handler or behavior | Arbitrator |
+| 63 | Notification behaviors | Applicable notification behaviors run around each handler call separately, in global registration order, outermost first | Arbitrator |
+| 64 | Arguments of a notification behavior | The publisher's notification instance, the implementation type of the handler it wraps, and the token | Arbitrator |
+| 65 | Applicability of notification behaviors | Closed: the exact notification type. Open: the runtime constraint check. Request and notification behaviors never wrap each other's handlers | Arbitrator |
+| 66 | A notification behavior doesn't invoke `next` | Its handler, already constructed, is skipped, and publication continues with the next handler | Arbitrator |
+| 67 | A notification behavior catches its handler's exception | It may swallow or translate it. If it completes normally, publication continues. Arbitrator imposes nothing | Behavior |
+| 68 | `next` invoked twice by a notification behavior | `InvalidOperationException` naming the behavior. The handler runs once | Arbitrator |
+| 69 | A notification behavior returns a null `Task` | `InvalidOperationException` naming the behavior and the notification type | Arbitrator |
+| 70 | Notification behavior instances | Each handler call gets its own instances, and every behavior and handler is resolved before the first runs | Arbitrator |
+| 71 | Cancellation with notification behaviors | Checked before each handler's chain, and otherwise only forwarded | **Checked by Arbitrator** |
+| 72 | Notification without handlers | No notification behavior is resolved or run | Arbitrator |
 
 **Example of token substitution (row 20):**
 
@@ -550,16 +575,16 @@ exception type and the type names a message contains, not on exact text.
 | Abstract handler | Registration | `Handler type 'Contoso.Customers.HandlerBase' is abstract; register a concrete class.` |
 | Request with several request contracts | Registration | `Request type 'Contoso.Customers.Ambiguous' implements more than one request contract (IRequest<A>, IStreamRequest<B>). A request type must implement exactly one of IRequest, IRequest<TResponse>, or IStreamRequest<TItem>.` |
 | Handler for an abstract or interface request type | Registration | `Handler 'Contoso.Customers.QueryHandler' handles 'Contoso.Customers.QueryBase', which is abstract or an interface. Requests are dispatched by their exact runtime type, so this handler could never run; register a handler for each concrete request type.` |
-| Invalid open behavior | Registration | `Open behavior 'Contoso.Pipeline.AuditBehavior<T>' must be a generic type definition with exactly two type parameters that implements exactly one of IPipelineBehavior<TRequest, TResponse> or IStreamPipelineBehavior<TRequest, TItem>, using those parameters in order.` |
+| Invalid open behavior | Registration | `Open behavior 'Contoso.Pipeline.AuditBehavior<T>' must be a generic type definition that implements exactly one behavior contract using its type parameters in order: IPipelineBehavior<TRequest, TResponse> or IStreamPipelineBehavior<TRequest, TItem> with two type parameters, or INotificationBehavior<TNotification> with one.` |
 | Closed type passed to `AddOpenBehavior` | Registration | `'Contoso.Pipeline.LoggingBehavior<Contoso.Customers.GetCustomer, Contoso.Customers.CustomerDto?>' is a closed type. Register it with AddBehavior<TBehavior>() or pass the generic type definition 'Contoso.Pipeline.LoggingBehavior<,>'.` |
 | Generic parameter or partially closed type passed to `AddOpenBehavior` | Registration | `'TRequest' is a generic type parameter, not a behavior type. Pass a generic type definition, such as typeof(LoggingBehavior<,>).` or `'Contoso.Pipeline.LoggingBehavior<Contoso.Customers.GetCustomer, TResponse>' is partially closed. Pass the generic type definition 'Contoso.Pipeline.LoggingBehavior<,>'.` |
 | Value-type open behavior | Registration | `Behavior type 'Contoso.Pipeline.TimingBehavior<,>' is a value type; behaviors must be classes.` |
 | Read-only service collection | Registration | `The service collection is read-only, typically because the host has been built. Complete all AddArbitrator calls before building the host.` |
-| Invalid closed behavior | Registration | `Type 'Contoso.Pipeline.Auditor' cannot be registered as a behavior: it implements neither IPipelineBehavior<TRequest, TResponse> nor IStreamPipelineBehavior<TRequest, TItem>.` (The same message is used for abstract types and interfaces, with the reason adjusted.) |
+| Invalid closed behavior | Registration | `Type 'Contoso.Pipeline.Auditor' cannot be registered as a behavior: it implements none of IPipelineBehavior<TRequest, TResponse>, IStreamPipelineBehavior<TRequest, TItem>, or INotificationBehavior<TNotification>.` (The same message is used for abstract types and interfaces, with the reason adjusted.) |
 | Duplicate behavior | Registration | `Behavior 'Contoso.Pipeline.LoggingBehavior<,>' is already registered at position 1. Each behavior may be registered once; its registration position defines its place in the pipeline.` |
 | Behavior would run twice | Registration | `Behavior 'Contoso.Pipeline.LoggingBehavior<Contoso.Customers.GetCustomer, Contoso.Customers.CustomerDto?>' would run twice for request 'Contoso.Customers.GetCustomer': registered as a closed behavior at position 3 and produced by open behavior 'Contoso.Pipeline.LoggingBehavior<,>' at position 1.` |
-| Closed behavior with no handler | First `ISender` or `IPublisher` resolution | `Behavior 'Contoso.Customers.AuditDeactivationBehavior' implements IPipelineBehavior<Contoso.Customers.DeactivateCustomer, Arbitrator.Unit>, but no handler is registered for 'Contoso.Customers.DeactivateCustomer'.` |
-| Closed stream behavior with no handler | First `ISender` or `IPublisher` resolution | `Behavior 'Contoso.Customers.AuditSearchBehavior' implements IStreamPipelineBehavior<Contoso.Customers.SearchCustomers, Contoso.Customers.CustomerDto>, but no handler is registered for its request type.` |
+| Notification behavior would run twice | Registration | `Behavior 'Contoso.Pipeline.TimingBehavior<Contoso.Events.CustomerArchived>' would run twice for notification 'Contoso.Events.CustomerArchived': it is produced by 'Contoso.Pipeline.TimingBehavior<>' at position 1 and by 'Contoso.Pipeline.TimingBehavior<Contoso.Events.CustomerArchived>' at position 2.` |
+| Closed behavior with no handler | First `ISender`, `IPublisher`, or `ArbitratorRegistrations` resolution | `Behavior 'Contoso.Customers.AuditDeactivationBehavior' implements IPipelineBehavior<Contoso.Customers.DeactivateCustomer, Arbitrator.Unit>, but none of the types it applies to has a registered handler.` Stream and notification behaviors are reported the same way, naming IStreamPipelineBehavior<…> or INotificationBehavior<…> |
 | Change after freezing | Registration | `Arbitrator registrations cannot change once a service provider has attempted to resolve ISender or IPublisher. Complete all AddArbitrator calls before building the service provider.` |
 | Registered after the provider was built | First `ISender` or `IPublisher` resolution | `These handlers and behaviors were registered after this service provider was built, so it cannot resolve them: 'Contoso.Customers.LateHandler'. Complete all AddArbitrator calls before building the service provider.` |
 | Continuation invoked twice | Dispatch | `Behavior 'Contoso.Pipeline.RetryBehavior<Contoso.Customers.GetCustomer, Contoso.Customers.CustomerDto?>' invoked its continuation more than once while handling 'Contoso.Customers.GetCustomer'. A continuation may be invoked at most once.` |

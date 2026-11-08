@@ -11,7 +11,7 @@ namespace Arbitrator.Registration;
 /// <param name="Position">The one-based registration position.</param>
 /// <param name="Kind">The kind of pipeline the behavior contract belongs to.</param>
 internal sealed record OpenBehaviorRegistration(Type BehaviorType, int Position, PipelineKind Kind)
-    : BehaviorRegistration(BehaviorType, Position)
+    : OpenRegistration(BehaviorType, Position)
 {
     /// <summary>
     /// Closes the behavior over a contract's types when the contract is of the behavior's kind and the runtime

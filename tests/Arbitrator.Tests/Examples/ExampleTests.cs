@@ -135,6 +135,20 @@ public sealed class ExampleTests
         await Assert.That(unhandled).IsEmpty();
     }
 
+    [Test]
+    public async Task Handler_timing_behavior_wraps_each_deactivation_handler()
+    {
+        await using TestHost host = CreateHost();
+        NotificationRegistration deactivated = host.Registrations.Notifications.Single();
+
+        await host.Publisher.PublishAsync(new CustomerDeactivated(UnknownCustomerId, "Moved away"));
+
+        await Assert.That(deactivated.BehaviorTypes)
+            .IsEquivalentTo([typeof(HandlerTimingBehavior<CustomerDeactivated>)]);
+        await Assert.That(deactivated.HandlerTypes.Count).IsEqualTo(2);
+        await Expect.EntriesAsync(host.Journal, "audit recorded", "deactivation email queued");
+    }
+
     private static bool IsRequestType(Type type)
     {
         return type.GetInterfaces().Any(contract => contract.IsGenericType
@@ -153,6 +167,7 @@ public sealed class ExampleTests
                 .AddOpenBehavior(typeof(ValidationBehavior<,>))
                 .AddOpenBehavior(typeof(TransactionBehavior<,>))
                 .AddOpenBehavior(typeof(StreamLoggingBehavior<,>))
+                .AddOpenBehavior(typeof(HandlerTimingBehavior<>))
                 .AddHandler<GetCustomerHandler>()
                 .AddHandler<SearchCustomersHandler>()
                 .AddHandler<DeactivateCustomerHandler>()

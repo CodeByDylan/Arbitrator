@@ -5,7 +5,8 @@ using Arbitrator.Dispatch;
 namespace Arbitrator.Registration;
 
 /// <summary>
-/// The notification handlers registered with one service collection, in global registration order.
+/// The notification handlers registered with one service collection, in global registration order, and the behaviors
+/// planned around them.
 /// </summary>
 internal sealed class RegisteredNotificationHandlers
 {
@@ -26,19 +27,30 @@ internal sealed class RegisteredNotificationHandlers
     }
 
     /// <summary>
+    /// Finds the notification types among a handler's contracts that have no plan yet.
+    /// </summary>
+    /// <param name="contracts">The notification contracts the handler type implements.</param>
+    /// <returns>The notification types without a plan.</returns>
+    public IEnumerable<Type> FindUnplannedTypes(IReadOnlyList<NotificationHandlerContract> contracts)
+    {
+        return contracts
+            .Select(contract => contract.NotificationType)
+            .Where(notificationType => !_plansByNotificationType.ContainsKey(notificationType));
+    }
+
+    /// <summary>
     /// Records a handler type as the last handler of every notification type it handles.
     /// </summary>
-    /// <remarks>
-    /// Plans for notification types without handlers are created before anything is recorded, so a failure leaves
-    /// the registrations unchanged.
-    /// </remarks>
     /// <param name="handlerType">The handler type.</param>
     /// <param name="contracts">The notification contracts the handler type implements.</param>
-    [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
-    public void Add(Type handlerType, IReadOnlyList<NotificationHandlerContract> contracts)
+    /// <param name="newPlans">
+    /// The plans for the notification types that had none, already holding their behaviors.
+    /// </param>
+    public void Add(
+        Type handlerType,
+        IReadOnlyList<NotificationHandlerContract> contracts,
+        IReadOnlyList<NotificationPlan> newPlans)
     {
-        List<NotificationPlan> newPlans = CreateMissingPlans(contracts);
-
         foreach (NotificationPlan plan in newPlans)
         {
             _plansByNotificationType.Add(plan.NotificationType, plan);
@@ -48,8 +60,55 @@ internal sealed class RegisteredNotificationHandlers
 
         foreach (NotificationHandlerContract contract in contracts)
         {
-            _plansByNotificationType[contract.NotificationType].Append(handlerType);
+            _plansByNotificationType[contract.NotificationType].AppendHandler(handlerType);
         }
+    }
+
+    /// <summary>
+    /// Finds where a closed behavior goes: at the end of every plan whose notification type it applies to.
+    /// </summary>
+    /// <param name="registration">The closed behavior registration.</param>
+    /// <returns>The placements.</returns>
+    public IEnumerable<BehaviorPlacement> PlaceClosedBehavior(ClosedBehaviorRegistration registration)
+    {
+        var plannedBehavior = new PlannedBehavior(registration.BehaviorType, registration);
+
+        return _plansByNotificationType.Values
+            .Where(plan => registration.AppliesToNotification(plan.NotificationType))
+            .Select(plan => new BehaviorPlacement(plan, plannedBehavior));
+    }
+
+    /// <summary>
+    /// Finds where an open notification behavior goes: closed over the notification type of every plan whose type
+    /// satisfies the behavior's generic constraints.
+    /// </summary>
+    /// <param name="registration">The open notification behavior registration.</param>
+    /// <returns>The placements, each with its closed behavior type.</returns>
+    [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
+    [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
+    public List<BehaviorPlacement> PlaceOpenBehavior(OpenNotificationBehaviorRegistration registration)
+    {
+        List<BehaviorPlacement> placements = [];
+
+        foreach (NotificationPlan plan in _plansByNotificationType.Values)
+        {
+            if (registration.CloseOver(plan.NotificationType) is { } closedType)
+            {
+                placements.Add(new BehaviorPlacement(plan, new PlannedBehavior(closedType, registration)));
+            }
+        }
+
+        return placements;
+    }
+
+    /// <summary>
+    /// Determines whether a behavior registration wraps the handlers of any notification type.
+    /// </summary>
+    /// <param name="registration">The behavior registration.</param>
+    /// <returns><see langword="true"/> when some plan contains the registration.</returns>
+    public bool Contains(BehaviorRegistration registration)
+    {
+        return _plansByNotificationType.Values.Any(plan => plan.Contains(registration));
     }
 
     /// <summary>
@@ -71,7 +130,7 @@ internal sealed class RegisteredNotificationHandlers
     }
 
     /// <summary>
-    /// Creates an independent copy of the registered notification handlers.
+    /// Creates an independent copy of the registered notification handlers and their plans.
     /// </summary>
     /// <returns>The copy.</returns>
     public RegisteredNotificationHandlers Copy()
@@ -85,22 +144,5 @@ internal sealed class RegisteredNotificationHandlers
         }
 
         return copy;
-    }
-
-    /// <summary>
-    /// Creates plans for the notification types that have no handlers yet, without recording them.
-    /// </summary>
-    /// <param name="contracts">The notification contracts of a new handler.</param>
-    /// <returns>The new plans.</returns>
-    [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
-    private List<NotificationPlan> CreateMissingPlans(IReadOnlyList<NotificationHandlerContract> contracts)
-    {
-        return
-        [
-            .. contracts
-                .Select(contract => contract.NotificationType)
-                .Where(notificationType => !_plansByNotificationType.ContainsKey(notificationType))
-                .Select(notificationType => new NotificationPlan(notificationType)),
-        ];
     }
 }

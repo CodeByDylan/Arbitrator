@@ -12,7 +12,7 @@ is small enough to read in one sitting. `docs/contract.md`, in the source reposi
 - **Exactly one handler** for each concrete request type, selected by the request's exact runtime type.
 - **Requests with and without a response.** Handlers of no-response requests return a plain `Task`.
 - **Streaming requests.** A handler returns `IAsyncEnumerable<T>`, and stream behaviors wrap the whole read.
-- **One pipeline abstraction for each kind of request.** Behaviors run in registration order, and the first
+- **One pipeline abstraction for each kind of message.** Behaviors run in registration order, and the first
   registered is the outermost.
 - **Notifications.** Zero or more handlers per notification type, run one after another in registration order.
 - **Explicit registration** with actionable configuration errors, plus opt-in assembly scanning for handlers. Behaviors
@@ -135,9 +135,9 @@ await publisher.PublishAsync(new CustomerDeactivated(customer.Id, reason), cance
 ```
 
 - **Order.** Handlers run one after another, in the order they were registered across all `AddArbitrator` calls. Each
-  is awaited before the next starts, and every handler starts on the caller's synchronization context. Await
-  publishing; never block on it with `.Wait()` or `.Result`, which deadlocks single-threaded contexts when several
-  handlers are registered.
+  is awaited before the next starts, and every handler, or its outermost notification behavior, starts on the caller's
+  synchronization context. Await publishing; never block on it with `.Wait()` or `.Result`, which deadlocks
+  single-threaded contexts when several handlers are registered.
 - **No handlers.** Publishing a notification nobody handles succeeds.
 - **Failures.** The first exception stops publication and reaches the caller. Handlers that already ran keep their
   effects: publishing is not a transaction. If you need all-or-nothing, wrap the publish in your own transaction.
@@ -145,7 +145,53 @@ await publisher.PublishAsync(new CustomerDeactivated(customer.Id, reason), cance
 - **Exact type.** A notification reaches only the handlers registered for its exact runtime type, never those of its
   base class. Seal your notification types so this can't surprise you.
 - **In-process only.** There is no parallel or fire-and-forget publishing, no durability, and no outbox. Request
-  behaviors never wrap notification handlers.
+  behaviors never wrap notification handlers; use notification behaviors for that.
+
+
+### Notification behaviors
+
+An `INotificationBehavior<TNotification>` wraps each handler call. With three handlers, it runs three times, each
+time around one handler, and it receives that handler's type:
+
+```csharp
+public sealed class HandlerTimingBehavior<TNotification>(ILogger<HandlerTimingBehavior<TNotification>> logger)
+    : INotificationBehavior<TNotification>
+    where TNotification : INotification
+{
+    public async Task HandleAsync(
+        TNotification notification,
+        Type handlerType,
+        NotificationContinuation next,
+        CancellationToken cancellationToken)
+    {
+        long started = Stopwatch.GetTimestamp();
+
+        try
+        {
+            await next(cancellationToken);
+        }
+        finally
+        {
+            logger.LogInformation(
+                "{Handler} handled {Notification} in {Elapsed}",
+                handlerType.Name,
+                typeof(TNotification).Name,
+                Stopwatch.GetElapsedTime(started));
+        }
+    }
+}
+```
+
+Register it like any behavior, with `AddOpenBehavior(typeof(HandlerTimingBehavior<>))`, or a closed one with
+`AddBehavior<T>()`. Notification behaviors share the global behavior order with request behaviors, but the two never
+wrap each other's handlers.
+
+- **Skipping a handler.** A behavior that doesn't call `next` skips its handler, and the next handler still runs.
+- **Isolating failures.** A behavior that catches its handler's exception and returns normally lets the remaining
+  handlers run. Log what you catch: Arbitrator imposes nothing, so a swallowed exception is gone.
+- **Instances.** Each handler call gets its own behavior instances, and everything is resolved before the first
+  handler runs.
+- **Cancellation.** The token is still checked before each handler, before its outermost behavior.
 
 ## Streaming requests
 
@@ -325,7 +371,8 @@ public async Task Every_request_type_has_a_handler()
 | Stream behaviors | Wrap the whole read, in the shared behavior order. They never wrap other handlers, and request behaviors never wrap stream handlers |
 | A stream behavior reads the stream from `next` twice | `InvalidOperationException` |
 | No handler for a notification's runtime type | Publishing succeeds |
-| A notification handler throws | Later handlers don't run, and the same exception instance reaches the caller |
+| A notification handler throws | Later handlers don't run unless a notification behavior catches the exception, and the same exception instance reaches the caller |
+| Notification behaviors | Wrap each handler call separately, in the shared behavior order. One that catches its handler's exception lets publication continue |
 | Handler or behavior throws | The same exception instance reaches the caller |
 | Token already canceled | The send, or the stream read, is canceled before anything is constructed. A stream observes both its `StreamAsync` token and the read's token |
 | Cancellation during the send or read | Forwarded only. Handlers decide how to observe it |
@@ -346,10 +393,9 @@ don't return them to clients: they reveal your application's namespaces and type
 ## Trimming and Native AOT
 
 Registration closes generic types at runtime and inspects request types through reflection. For that reason,
-`AddHandler` and `AddOpenBehavior` are marked `RequiresDynamicCode` and `RequiresUnreferencedCode`,
-`AddNotificationHandler` is marked `RequiresDynamicCode`, and Native AOT isn't supported yet. The assembly scanning
-methods carry both attributes: they discover types at runtime, and trimming can remove handler types that nothing else
-references.
+`AddHandler`, `AddOpenBehavior`, and `AddNotificationHandler` are marked `RequiresDynamicCode` and
+`RequiresUnreferencedCode`, and Native AOT isn't supported yet. The assembly scanning methods carry both attributes:
+they discover types at runtime, and trimming can remove handler types that nothing else references.
 
 ## License
 

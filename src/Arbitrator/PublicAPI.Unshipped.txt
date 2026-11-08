@@ -1,1 +1,6 @@
 #nullable enable
+Arbitrator.INotificationBehavior<TNotification>
+Arbitrator.INotificationBehavior<TNotification>.HandleAsync(TNotification notification, System.Type! handlerType, Arbitrator.NotificationContinuation! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Arbitrator.NotificationContinuation
+Arbitrator.NotificationRegistration.BehaviorTypes.get -> System.Collections.Generic.IReadOnlyList<System.Type!>!
+virtual Arbitrator.NotificationContinuation.Invoke(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
