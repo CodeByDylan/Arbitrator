@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Arbitrator.Dispatch;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Arbitrator.Registration;
 
@@ -9,16 +10,19 @@ namespace Arbitrator.Registration;
 internal sealed class PipelinePlan : IBehaviorPlan
 {
     private readonly PipelineInvoker _invokerTemplate;
+    private readonly ComponentRegistration _handler;
     private readonly PlannedBehaviors _behaviors;
 
     /// <summary>
-    /// Creates a plan with no behaviors for a handler contract.
+    /// Creates a plan with no behaviors for a handler contract and the lifetime its handler is registered with.
     /// </summary>
     /// <param name="contract">The handler contract.</param>
+    /// <param name="handlerLifetime">The lifetime the handler is registered with in its request role.</param>
     [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
-    public PipelinePlan(HandlerContract contract)
+    public PipelinePlan(HandlerContract contract, ServiceLifetime handlerLifetime)
     {
         Contract = contract;
+        _handler = new ComponentRegistration(contract.HandlerType, handlerLifetime);
         _behaviors = new PlannedBehaviors();
         _invokerTemplate = PipelineInvoker.CreateTemplate(
             contract.Kind,
@@ -35,6 +39,7 @@ internal sealed class PipelinePlan : IBehaviorPlan
     {
         Contract = source.Contract;
         _invokerTemplate = source._invokerTemplate;
+        _handler = source._handler;
         _behaviors = source._behaviors.Copy();
     }
 
@@ -88,5 +93,5 @@ internal sealed class PipelinePlan : IBehaviorPlan
     /// Describes the planned handler contract and pipeline.
     /// </summary>
     /// <returns>The description.</returns>
-    public RequestRegistration Describe() => new(Contract, _behaviors.ClosedTypes());
+    public RequestRegistration Describe() => new(Contract, _handler, _behaviors.Components());
 }

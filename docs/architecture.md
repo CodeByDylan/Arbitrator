@@ -8,7 +8,7 @@ are given so the code is easy to find; the XML documentation on each type is the
 
 | Folder and namespace | Contents |
 | --- | --- |
-| `src/Arbitrator/`, `Arbitrator` | The public contracts, `ArbitratorBuilder`, and `ArbitratorConfigurationException` |
+| `src/Arbitrator/`, `Arbitrator` | The public contracts, the inspection types, `ArbitratorBuilder` (a partial class in three files: handlers, behaviors, and scanning), and `ArbitratorConfigurationException` |
 | `src/Arbitrator/`, `Microsoft.Extensions.DependencyInjection` | `ArbitratorServiceCollectionExtensions`, the `AddArbitrator` entry point. The only type whose namespace doesn't match its folder |
 | `Registration/`, `Arbitrator.Registration` | The registry, type inspectors, assembly scanning, descriptor emission, and registration errors |
 | `Dispatch/`, `Arbitrator.Dispatch` | `Sender`, `Publisher`, the pipeline kinds, the dispatch table, invokers, guarded continuations, the service keys, and dispatch errors |
@@ -24,10 +24,13 @@ There is no `InternalsVisibleTo`: tests use only the public API.
    implementations.
 2. **Later calls** find the registry by its descriptor and add to it. A registry found in a collection it doesn't own
    came from a copied collection, so it is copied and the copy replaces it.
-3. **Each builder call** validates the type, records it in the registry's `Registrations`, and adds keyed transient
-   descriptors. Request components, notification handlers, and notification behaviors each use their own key
-   (`ArbitratorServiceKey`). Handlers and closed behaviors are registered as their implementation type. An open
-   behavior is registered as one closed instantiation per applicable handler contract or notification type.
+3. **Each builder call** validates the type and its lifetime, records it in the registry's `Registrations`, and adds
+   keyed descriptors with that lifetime, transient unless an overload gives another. Request components, notification
+   handlers, and notification behaviors each use their own key (`ArbitratorServiceKey`). Handlers and closed behaviors
+   are registered as their implementation type. An open behavior is registered as one closed instantiation per
+   applicable handler contract or notification type. A handler's lifetime is stored with it in its plan, and a
+   behavior's on its `BehaviorRegistration`, so descriptors emitted later, when a new plan is created or a behavior
+   is placed, still get the right lifetime. `ComponentDescriptors` creates every descriptor.
 4. **Pipeline kinds.** Every handler contract, closed-behavior contract, and open behavior records its `PipelineKind`:
    `Response` for the `IRequest<>` contracts and `Stream` for the `IStreamRequest<>` contracts. The kind holds the
    generic definitions of its request, handler, and behavior contracts, so the inspectors find both kinds in one pass,

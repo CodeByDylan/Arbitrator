@@ -2,7 +2,7 @@ namespace Arbitrator.Tests.Support;
 
 /// <summary>
 /// A behavior that records its name before and after the remainder of the pipeline, and captures the token it
-/// receives.
+/// receives and itself.
 /// </summary>
 /// <typeparam name="TRequest">The request type.</typeparam>
 /// <typeparam name="TResponse">The response type.</typeparam>
@@ -31,6 +31,7 @@ public abstract class RecordingBehavior<TRequest, TResponse> : IPipelineBehavior
     {
         _journal.Record($"{_name}.before");
         _journal.Capture(new ObservedToken(_name, cancellationToken));
+        _journal.Capture(this);
 
         TResponse response = await next(cancellationToken);
 

@@ -1,1 +1,16 @@
 #nullable enable
+Arbitrator.ArbitratorBuilder.AddBehavior<TBehavior>(Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime) -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddHandler<THandler>(Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime) -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddHandlersFromAssembly(System.Reflection.Assembly! assembly, Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime) -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddHandlersFromAssembly(System.Reflection.Assembly! assembly, System.Func<System.Type!, bool>! filter, Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime) -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddHandlersFromAssemblyContaining<TMarker>(Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime) -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddHandlersFromAssemblyContaining<TMarker>(System.Func<System.Type!, bool>! filter, Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime) -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddNotificationHandler<THandler>(Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime) -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddOpenBehavior(System.Type! openBehaviorType, Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime) -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ComponentRegistration
+Arbitrator.ComponentRegistration.ImplementationType.get -> System.Type!
+Arbitrator.ComponentRegistration.Lifetime.get -> Microsoft.Extensions.DependencyInjection.ServiceLifetime
+Arbitrator.NotificationRegistration.Behaviors.get -> System.Collections.Generic.IReadOnlyList<Arbitrator.ComponentRegistration!>!
+Arbitrator.NotificationRegistration.Handlers.get -> System.Collections.Generic.IReadOnlyList<Arbitrator.ComponentRegistration!>!
+Arbitrator.RequestRegistration.Behaviors.get -> System.Collections.Generic.IReadOnlyList<Arbitrator.ComponentRegistration!>!
+Arbitrator.RequestRegistration.Handler.get -> Arbitrator.ComponentRegistration!

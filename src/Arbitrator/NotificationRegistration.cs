@@ -11,16 +11,18 @@ public sealed class NotificationRegistration
     /// Creates the description of a notification type, its handlers, and its behaviors.
     /// </summary>
     /// <param name="notificationType">The notification type.</param>
-    /// <param name="handlerTypes">The handler types, in the order they run.</param>
-    /// <param name="behaviorTypes">The closed behavior types that wrap each handler, outermost first.</param>
+    /// <param name="handlers">The handlers and their lifetimes, in the order they run.</param>
+    /// <param name="behaviors">The behaviors that wrap each handler and their lifetimes, outermost first.</param>
     internal NotificationRegistration(
         Type notificationType,
-        ImmutableArray<Type> handlerTypes,
-        ImmutableArray<Type> behaviorTypes)
+        ImmutableArray<ComponentRegistration> handlers,
+        ImmutableArray<ComponentRegistration> behaviors)
     {
         NotificationType = notificationType;
-        HandlerTypes = handlerTypes;
-        BehaviorTypes = behaviorTypes;
+        Handlers = handlers;
+        Behaviors = behaviors;
+        HandlerTypes = handlers.Select(handler => handler.ImplementationType).ToImmutableArray();
+        BehaviorTypes = behaviors.Select(behavior => behavior.ImplementationType).ToImmutableArray();
     }
 
     /// <summary>
@@ -34,8 +36,19 @@ public sealed class NotificationRegistration
     public IReadOnlyList<Type> HandlerTypes { get; }
 
     /// <summary>
+    /// Gets the handlers and their lifetimes, in the same order as <see cref="HandlerTypes"/>.
+    /// </summary>
+    public IReadOnlyList<ComponentRegistration> Handlers { get; }
+
+    /// <summary>
     /// Gets the closed behavior types that run around each handler, outermost first. An open behavior appears as the
     /// instantiation that runs.
     /// </summary>
     public IReadOnlyList<Type> BehaviorTypes { get; }
+
+    /// <summary>
+    /// Gets the behaviors that run around each handler and their lifetimes, in the same order as
+    /// <see cref="BehaviorTypes"/>.
+    /// </summary>
+    public IReadOnlyList<ComponentRegistration> Behaviors { get; }
 }

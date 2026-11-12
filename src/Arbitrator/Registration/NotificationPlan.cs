@@ -10,7 +10,7 @@ namespace Arbitrator.Registration;
 internal sealed class NotificationPlan : IBehaviorPlan
 {
     private readonly NotificationInvoker _invokerTemplate;
-    private readonly List<Type> _handlerTypes;
+    private readonly List<ComponentRegistration> _handlers;
     private readonly PlannedBehaviors _behaviors;
 
     /// <summary>
@@ -22,7 +22,7 @@ internal sealed class NotificationPlan : IBehaviorPlan
     {
         NotificationType = notificationType;
         _invokerTemplate = NotificationInvoker.CreateTemplate(notificationType);
-        _handlerTypes = [];
+        _handlers = [];
         _behaviors = new PlannedBehaviors();
     }
 
@@ -34,7 +34,7 @@ internal sealed class NotificationPlan : IBehaviorPlan
     {
         NotificationType = source.NotificationType;
         _invokerTemplate = source._invokerTemplate;
-        _handlerTypes = [.. source._handlerTypes];
+        _handlers = [.. source._handlers];
         _behaviors = source._behaviors.Copy();
     }
 
@@ -52,8 +52,8 @@ internal sealed class NotificationPlan : IBehaviorPlan
     /// <summary>
     /// Adds a handler that runs after every handler already in the plan.
     /// </summary>
-    /// <param name="handlerType">The handler type.</param>
-    public void AppendHandler(Type handlerType) => _handlerTypes.Add(handlerType);
+    /// <param name="handler">The handler and the lifetime it is registered with.</param>
+    public void AppendHandler(ComponentRegistration handler) => _handlers.Add(handler);
 
     /// <inheritdoc/>
     public void EnsureCanAppend(PlannedBehavior candidate)
@@ -90,12 +90,14 @@ internal sealed class NotificationPlan : IBehaviorPlan
     /// <returns>The invoker.</returns>
     public NotificationInvoker CreateInvoker()
     {
-        return _invokerTemplate.WithComponents([.. _handlerTypes], _behaviors.ClosedTypes());
+        return _invokerTemplate.WithComponents(
+            [.. _handlers.Select(handler => handler.ImplementationType)],
+            _behaviors.ClosedTypes());
     }
 
     /// <summary>
     /// Describes the notification type, its planned handlers, and its planned behaviors.
     /// </summary>
     /// <returns>The description.</returns>
-    public NotificationRegistration Describe() => new(NotificationType, [.. _handlerTypes], _behaviors.ClosedTypes());
+    public NotificationRegistration Describe() => new(NotificationType, [.. _handlers], _behaviors.Components());
 }

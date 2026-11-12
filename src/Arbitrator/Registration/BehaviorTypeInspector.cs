@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Arbitrator.Registration;
 
@@ -13,13 +14,15 @@ internal static class BehaviorTypeInspector
     /// </summary>
     /// <param name="behaviorType">The closed behavior type.</param>
     /// <param name="position">The registration position assigned to the behavior.</param>
+    /// <param name="lifetime">The lifetime the behavior is registered with.</param>
     /// <returns>The behavior registration.</returns>
     /// <exception cref="ArbitratorConfigurationException">
     /// The type is abstract or implements no behavior contract.
     /// </exception>
     public static ClosedBehaviorRegistration InspectClosed(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type behaviorType,
-        int position)
+        int position,
+        ServiceLifetime lifetime)
     {
         if (behaviorType.IsAbstract)
         {
@@ -42,7 +45,10 @@ internal static class BehaviorTypeInspector
             throw BehaviorRegistrationErrors.NotABehavior(behaviorType);
         }
 
-        return new ClosedBehaviorRegistration(behaviorType, position, contracts, notificationTypes);
+        return new ClosedBehaviorRegistration(behaviorType, position, contracts, notificationTypes)
+        {
+            Lifetime = lifetime,
+        };
     }
 
     /// <summary>
@@ -50,6 +56,7 @@ internal static class BehaviorTypeInspector
     /// </summary>
     /// <param name="behaviorType">The generic type definition.</param>
     /// <param name="position">The registration position assigned to the behavior.</param>
+    /// <param name="lifetime">The lifetime the behavior is registered with.</param>
     /// <returns>
     /// The behavior registration: an <see cref="OpenBehaviorRegistration"/> for a request or stream behavior, or an
     /// <see cref="OpenNotificationBehaviorRegistration"/> for a notification behavior.
@@ -60,7 +67,8 @@ internal static class BehaviorTypeInspector
     /// </exception>
     public static OpenRegistration InspectOpen(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type behaviorType,
-        int position)
+        int position,
+        ServiceLifetime lifetime)
     {
         if (!behaviorType.IsGenericTypeDefinition)
         {
@@ -77,7 +85,7 @@ internal static class BehaviorTypeInspector
             throw BehaviorRegistrationErrors.AbstractBehavior(behaviorType);
         }
 
-        return ClassifyOpenBehavior(behaviorType, position)
+        return ClassifyOpenBehavior(behaviorType, position, lifetime)
             ?? throw BehaviorRegistrationErrors.InvalidOpenBehaviorShape(behaviorType);
     }
 
@@ -87,13 +95,15 @@ internal static class BehaviorTypeInspector
     /// </summary>
     /// <param name="definition">The generic type definition.</param>
     /// <param name="position">The registration position assigned to the behavior.</param>
+    /// <param name="lifetime">The lifetime the behavior is registered with.</param>
     /// <returns>
     /// The registration for the contract's kind, or <see langword="null"/> when the definition doesn't have that
     /// shape.
     /// </returns>
     private static OpenRegistration? ClassifyOpenBehavior(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type definition,
-        int position)
+        int position,
+        ServiceLifetime lifetime)
     {
         Type[] typeParameters = definition.GetGenericArguments();
         IReadOnlyList<PipelineContract> pipelineContracts =
@@ -103,9 +113,9 @@ internal static class BehaviorTypeInspector
         return (pipelineContracts, notificationContracts) switch
         {
             ([var contract], []) when MapsParametersInOrder(contract.Contract, typeParameters) =>
-                new OpenBehaviorRegistration(definition, position, contract.Kind),
+                new OpenBehaviorRegistration(definition, position, contract.Kind) { Lifetime = lifetime },
             ([], [var contract]) when MapsParametersInOrder(contract, typeParameters) =>
-                new OpenNotificationBehaviorRegistration(definition, position),
+                new OpenNotificationBehaviorRegistration(definition, position) { Lifetime = lifetime },
             _ => null,
         };
     }

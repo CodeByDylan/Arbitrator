@@ -34,7 +34,8 @@ These are the opinions that set Arbitrator apart from other mediators:
 7. **No static mutable state.** Every piece of state belongs to a service collection or a service provider, so tests
    and multiple hosts in one process stay isolated.
 8. **Start strict, relax later.** Relaxing a strict rule later doesn't break anyone, while tightening a loose one does.
-   That's why Arbitrator guards the continuation, uses transient-only lifetimes, and rejects duplicates.
+   That's why Arbitrator guards the continuation, registers components as transient unless told otherwise, and
+   rejects duplicates.
 
 ## 2. Out of scope
 
@@ -57,8 +58,8 @@ TResponse>`, `IRequestHandler<TRequest>`, `IPipelineBehavior<TRequest, TResponse
 `StreamContinuation<TItem>`, `ISender`, `INotification`, `INotificationHandler<TNotification>`,
 `INotificationBehavior<TNotification>`, `NotificationContinuation`, `IPublisher`, `Unit`, and
 `ArbitratorConfigurationException`. The registration description (§5.6) adds `ArbitratorRegistrations`,
-`RequestRegistration`, and `NotificationRegistration`, which are read-only data. The contracts' shape follows these
-rules:
+`RequestRegistration`, `NotificationRegistration`, and `ComponentRegistration`, which are read-only data. The
+contracts' shape follows these rules:
 
 - **Async naming and `Task`.** Methods are `SendAsync`, `StreamAsync`, `PublishAsync`, and `HandleAsync`, and return
   `Task` or `Task<TResponse>`, never `ValueTask`. The stream contracts return `IAsyncEnumerable<TItem>` instead.
@@ -103,6 +104,12 @@ namespace so that the implicit usings of ASP.NET Core and Worker projects find i
 - `AddHandlersFromAssembly(assembly)` and `AddHandlersFromAssemblyContaining<TMarker>()` register every request handler,
   stream handler, and notification handler class of one assembly, optionally only those a `Func<Type, bool>` filter
   accepts (§4.4).
+
+**Lifetimes.** Every method above has an overload that takes a `ServiceLifetime` as its last parameter. A component is
+registered with that lifetime: transient, scoped, or singleton. Without one, it is transient. A behavior's lifetime
+applies to every role and every closed instantiation of it, and a scan's lifetime applies to every handler the scan
+registers. A value that `ServiceLifetime` doesn't define throws `ArgumentOutOfRangeException` for `lifetime`, and
+nothing is registered.
 
 Each builder call either completes entirely or changes nothing: it validates first and only then mutates. The methods
 return the builder so calls can be chained. `THandler`, `TBehavior`, and `openBehaviorType` carry
@@ -245,13 +252,17 @@ the innermost behavior outward, and the caller receives the handler's exception 
 
   Exceptions from the filter propagate unchanged.
 - **Atomicity.** A scan registers all accepted types or none.
+- **Lifetime.** A scan registers every accepted type with the lifetime it is given, or as transient without one.
 
 ### 4.5 Concurrency
 
 - Arbitrator's own state is immutable once the first `ISender` or `IPublisher` is resolved, so concurrent sends and
   publishes are safe, including concurrent first resolutions.
-- No two sends share request-specific state. Handlers and behaviors are transient, so concurrent sends within one
-  scope get distinct instances.
+- No two sends share request-specific state held by Arbitrator. Transient handlers and behaviors are distinct
+  instances for every dispatch, including concurrent ones within one scope.
+- **Scoped and singleton components are shared.** A scoped component is shared by every dispatch in its scope,
+  including concurrent ones and nested dispatch, and a singleton by every dispatch in the provider. Arbitrator doesn't
+  make them thread-safe, and they must not keep request-specific state.
 - Arbitrator doesn't make **scoped dependencies** thread-safe. Two concurrent sends in one scope share that scope's
   `DbContext`, for example, and concurrent use of it is the caller's responsibility.
 
@@ -324,15 +335,16 @@ The library builds with `IsAotCompatible`, no trimming or AOT analyzer warnings,
 | `IPublisher` | Scoped | Unkeyed, like `ISender` |
 | `ArbitratorRegistrations` | Singleton | Unkeyed. Describes the registrations of the provider (§5.6) |
 | Arbitrator's internal registry and dispatch table | Singleton | Internal types only |
-| Handlers, including stream handlers | Transient | Keyed with a private key, registered as their implementation type, one descriptor per handler type |
-| Closed behaviors of either kind | Transient | Keyed, registered as their implementation type |
-| Open behaviors of either kind | Transient | Keyed. One closed descriptor per applicable registered request of the same kind |
-| Notification handlers | Transient | Keyed under a separate private key, registered as their implementation type. A class registered as both a request handler and a notification handler has one registration per role |
-| Notification behaviors | Transient | Keyed under a third private key, registered as their implementation type. A closed behavior gets one descriptor; an open one gets one closed descriptor per notification type with handlers that it applies to |
+| Handlers, including stream handlers | Transient by default, or as registered | Keyed with a private key, registered as their implementation type, one descriptor per handler type |
+| Closed behaviors of either kind | Transient by default, or as registered | Keyed, registered as their implementation type |
+| Open behaviors of either kind | Transient by default, or as registered, for every instantiation | Keyed. One closed descriptor per applicable registered request of the same kind |
+| Notification handlers | Transient by default, or as registered | Keyed under a separate private key, registered as their implementation type. A class registered as both a request handler and a notification handler has one registration per role |
+| Notification behaviors | Transient by default, or as registered | Keyed under a third private key, registered as their implementation type. A closed behavior gets one descriptor; an open one gets one closed descriptor per notification type with handlers that it applies to |
 
-A handler that implements several contracts has one descriptor and still gets a new instance for every send. If the
-application also registers a handler type itself, for example `AddScoped<GetCustomerHandler>()`, that registration is
-separate and Arbitrator never uses it.
+A handler that implements several contracts has one descriptor, so it has one lifetime: transient gives it a new
+instance for every send, and scoped or singleton share one instance across its contracts. A class registered in two
+roles has one lifetime and one instance per role. If the application also registers a handler type itself, for example
+`AddScoped<GetCustomerHandler>()`, that registration is separate and Arbitrator never uses it.
 
 ### 5.2 Scopes
 
@@ -355,8 +367,8 @@ separate and Arbitrator never uses it.
 
 The DI container owns the disposal of services, and Arbitrator never calls `Dispose` or `DisposeAsync` on one:
 
-- Transient disposable handlers and behaviors are disposed when the scope that resolved them is disposed, not when
-  `SendAsync` completes or a stream read ends.
+- Transient and scoped disposable handlers and behaviors are disposed when the scope that resolved them is disposed,
+  not when `SendAsync` completes or a stream read ends. Singleton components are disposed with the root provider.
 - While reading a stream, Arbitrator disposes the enumerator it obtained from the outermost component, when the read
   ends or the caller stops early, and the linked token source it created for the read, if any (§4.8). An enumerator
   that is read by hand and neither finished nor disposed keeps its components referenced until it is collected.
@@ -404,7 +416,7 @@ The DI container owns the disposal of services, and Arbitrator never calls `Disp
 | Stage | What is detected | What can't be detected here |
 | --- | --- | --- |
 | **Registration** (each builder call, atomic) | Null arguments. A read-only collection. Invalid handler or behavior shapes, including value-type, generic-parameter, and partially closed behavior types. Abstract request and notification types, and request types with more than one request contract of any kind. Open behaviors implementing more than one behavior contract, or with the wrong number of type parameters for their contract. All duplicate cases. Scanning failures (§4.4). Calls made after freezing | Constructor dependencies. Whether the application has requests without handlers |
-| **Container validation** (`ValidateOnBuild`, `ValidateScopes`) | Unresolvable constructor dependencies of every handler, notification handler, and behavior instantiation that applies to a registered request or notification, because all of them are closed keyed descriptors. Singletons that depend on `ISender` or `IPublisher`. Lifetime violations inside application services | Exceptions thrown by constructors. Arbitrator's own cross-registration rules |
+| **Container validation** (`ValidateOnBuild`, `ValidateScopes`) | Unresolvable constructor dependencies of every handler, notification handler, and behavior instantiation that applies to a registered request or notification, because all of them are closed keyed descriptors. Singletons that depend on `ISender` or `IPublisher`. Singleton handlers and behaviors that depend on scoped services. Lifetime violations inside application services | Exceptions thrown by constructors. Arbitrator's own cross-registration rules |
 | **First `ISender`, `IPublisher`, or `ArbitratorRegistrations` resolution** in a provider | Closed behaviors that match no registered handler contract and no notification type with handlers. Handlers and behaviors registered after the provider was built | Requests that are never registered |
 | **Dispatch**, publishing, or the first `MoveNextAsync` of a stream read | Null request or notification. A request type with no handler, including derived types of handled requests. Constructor exceptions. A continuation invoked twice, or its stream read twice. Null `Task` or stream results | n/a |
 | **Never** | Arbitrator can't prove that every request type in the application has a handler; applications can check it with `ArbitratorRegistrations` (§5.6). It doesn't check that handlers honor cancellation, or that a non-nullable `TResponse` is actually non-null | |
@@ -428,12 +440,12 @@ the test instead of the first send.
   - `RequestType`: the exact type dispatch selects the entry for
   - `ResponseType`: the `TResponse` of `IRequest<TResponse>`, `Unit` for `IRequest`, or the `TItem` of
     `IStreamRequest<TItem>`
-  - `IsStream`, and `HandlerType`
+  - `IsStream`, `HandlerType`, and `Handler`, which pairs the handler type with its lifetime
   - `BehaviorTypes`: the closed behavior types dispatch runs for the request, outermost first. Open behaviors appear
-    as the instantiation that runs
+    as the instantiation that runs. `Behaviors` lists the same behaviors with their lifetimes, in the same order
 - **`Notifications`.** One `NotificationRegistration` per notification type with at least one handler, with its
   `HandlerTypes` in run order and its `BehaviorTypes`, the closed notification behaviors that wrap each handler,
-  outermost first.
+  outermost first. `Handlers` and `Behaviors` list the same components with their lifetimes, in the same order.
 - **Order.** Both lists are sorted by the ordinal order of `Type.FullName`. Within an entry, types keep dispatch order.
 - **Read-only.** The lists are immutable: changing one through a mutable interface such as `IList<T>` throws
   `NotSupportedException`. The types have no public constructors and no value equality. Reading the description
@@ -471,11 +483,11 @@ passes values or exceptions through.
 | 21 | `next` invoked a second time, sequentially or concurrently | The second invocation throws `InvalidOperationException` synchronously from `next`. Inner components ran exactly once | Arbitrator |
 | 22 | `next` invoked after the behavior's own task has completed | Unsupported and not guarded. Scoped services may already be disposed | Not guarded |
 | 23 | Concurrent sends in different scopes | Fully isolated | Arbitrator plus DI |
-| 24 | Concurrent sends in one scope | Arbitrator's state is safe, and handlers and behaviors are distinct instances. Shared scoped services aren't protected | Arbitrator plus caller |
+| 24 | Concurrent sends in one scope | Arbitrator's state is safe, and transient handlers and behaviors are distinct instances, while scoped and singleton ones are shared. Shared scoped services aren't protected | Arbitrator plus caller |
 | 25 | Nested send | Permitted. It runs in the same scope through its own full pipeline. No recursion detection (§4.6) | Arbitrator |
 | 26 | `ISender` resolved from the root provider | DI throws if scope validation is enabled. Otherwise everything resolves from the root (§5.2) | DI |
 | 27 | A handler returns null for a non-nullable `TResponse` | Not checked. The value is returned as is | Not checked |
-| 28 | One class implements several handler contracts | Each contract dispatches normally, with a new instance per send | Arbitrator |
+| 28 | One class implements several handler contracts | Each contract dispatches normally. A transient handler gets a new instance per send; a scoped or singleton one shares its instance across its contracts | Arbitrator |
 | 29 | `SendAsync` called without being awaited | Never throws synchronously. Every failure in this table appears through the returned `Task` | Arbitrator |
 | 30 | Notification with no handlers for its runtime type | Publishing succeeds. Nothing is resolved and the token isn't inspected | Arbitrator |
 | 31 | Several notification handlers | They run sequentially in registration order, each awaited before the next | Arbitrator |
@@ -517,9 +529,18 @@ passes values or exceptions through.
 | 67 | A notification behavior catches its handler's exception | It may swallow or translate it. If it completes normally, publication continues. Arbitrator imposes nothing | Behavior |
 | 68 | `next` invoked twice by a notification behavior | `InvalidOperationException` naming the behavior. The handler runs once | Arbitrator |
 | 69 | A notification behavior returns a null `Task` | `InvalidOperationException` naming the behavior and the notification type | Arbitrator |
-| 70 | Notification behavior instances | Each handler call gets its own instances, and every behavior and handler is resolved before the first runs | Arbitrator |
+| 70 | Notification behavior instances | Each handler call gets its own transient instances; scoped and singleton behaviors are shared across the handler calls of a publish, and every behavior and handler is resolved before the first runs | Arbitrator |
 | 71 | Cancellation with notification behaviors | Checked before each handler's chain, and otherwise only forwarded | **Checked by Arbitrator** |
 | 72 | Notification without handlers | No notification behavior is resolved or run | Arbitrator |
+| 73 | A component registered with a lifetime overload | Registered with that lifetime. Without one, it is transient | Arbitrator |
+| 74 | Scoped component | One instance per scope, shared by every send, read, and publish in it, including concurrent ones | DI |
+| 75 | Singleton component | One instance per root provider, shared across scopes. It must tolerate concurrent use | DI |
+| 76 | Singleton component with a scoped dependency | Container validation reports it. Without validation, the singleton keeps the first scoped instance | DI |
+| 77 | One class in two roles | Each role has its own lifetime and its own instance | Arbitrator |
+| 78 | Open behavior with a lifetime | Every closed instantiation has that lifetime | Arbitrator |
+| 79 | Scan with a lifetime | Every request, stream, and notification handler the scan registers has that lifetime | Arbitrator |
+| 80 | Undefined lifetime value | `ArgumentOutOfRangeException` for `lifetime`. Nothing is registered | Arbitrator |
+| 81 | Inspecting lifetimes | Every component entry in `ArbitratorRegistrations` reports its lifetime | Arbitrator |
 
 **Example of token substitution (row 20):**
 
@@ -546,6 +567,7 @@ public sealed class TimeoutBehavior<TRequest, TResponse> : IPipelineBehavior<TRe
 | Exception | Thrown by | When |
 | --- | --- | --- |
 | `ArgumentNullException` | Arbitrator | A null `configure`, `openBehaviorType`, `request`, `notification`, `assembly`, or `filter` |
+| `ArgumentOutOfRangeException` | Arbitrator | A `lifetime` that `ServiceLifetime` doesn't define, passed to a registration overload |
 | `ArbitratorConfigurationException` (derives from `InvalidOperationException`) | Arbitrator | Every registration error (§7.2), a closed behavior with no handler when the first `ISender` or `IPublisher` is resolved, a builder call after freezing, and a missing handler at dispatch |
 | `InvalidOperationException` | Arbitrator | Misuse of the contract by user code at runtime: a continuation invoked twice, a continuation's stream read twice, or a null `Task` or stream result. These are bugs in a behavior or handler, not configuration problems |
 | `OperationCanceledException` | Arbitrator, from the entry check, or user code | The caller's token is already canceled at entry, or the effective token is already canceled when a stream read starts. Any other cancellation comes from user code |

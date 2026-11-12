@@ -41,13 +41,13 @@ internal sealed class RegisteredNotificationHandlers
     /// <summary>
     /// Records a handler type as the last handler of every notification type it handles.
     /// </summary>
-    /// <param name="handlerType">The handler type.</param>
+    /// <param name="handler">The handler type and the lifetime it is registered with.</param>
     /// <param name="contracts">The notification contracts the handler type implements.</param>
     /// <param name="newPlans">
     /// The plans for the notification types that had none, already holding their behaviors.
     /// </param>
     public void Add(
-        Type handlerType,
+        ComponentRegistration handler,
         IReadOnlyList<NotificationHandlerContract> contracts,
         IReadOnlyList<NotificationPlan> newPlans)
     {
@@ -56,11 +56,11 @@ internal sealed class RegisteredNotificationHandlers
             _plansByNotificationType.Add(plan.NotificationType, plan);
         }
 
-        _handlerTypes.Add(handlerType);
+        _handlerTypes.Add(handler.ImplementationType);
 
         foreach (NotificationHandlerContract contract in contracts)
         {
-            _plansByNotificationType[contract.NotificationType].AppendHandler(handlerType);
+            _plansByNotificationType[contract.NotificationType].AppendHandler(handler);
         }
     }
 

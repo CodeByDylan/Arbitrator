@@ -1,4 +1,5 @@
 using Arbitrator.Tests.Support;
+using Microsoft.Extensions.DependencyInjection;
 using TUnit.Assertions.Enums;
 
 namespace Arbitrator.Tests.Inspection;
@@ -73,6 +74,24 @@ public sealed class NotificationInspectionTests
         await Assert.That(registrations.Requests.Single().BehaviorTypes).IsEquivalentTo(
             [typeof(FirstBehavior<Ping, Pong>)],
             CollectionOrdering.Matching);
+    }
+
+    [Test]
+    public async Task Component_entries_report_lifetimes_in_the_order_of_the_type_lists()
+    {
+        await using TestHost host = TestHost.Create(arbitrator => arbitrator
+            .AddOpenBehavior(typeof(FirstNotificationBehavior<>), ServiceLifetime.Scoped)
+            .AddNotificationHandler<SecondAnnouncementHandler>(ServiceLifetime.Singleton)
+            .AddNotificationHandler<FirstAnnouncementHandler>());
+
+        NotificationRegistration notification = host.Registrations.Notifications.Single();
+
+        await Assert.That(notification.Handlers.Select(handler => handler.ImplementationType))
+            .IsEquivalentTo(notification.HandlerTypes, CollectionOrdering.Matching);
+        await Assert.That(notification.Handlers.Select(handler => handler.Lifetime)).IsEquivalentTo(
+            [ServiceLifetime.Singleton, ServiceLifetime.Transient],
+            CollectionOrdering.Matching);
+        await Assert.That(notification.Behaviors.Single().Lifetime).IsEqualTo(ServiceLifetime.Scoped);
     }
 
     public sealed record CustomerArchived : INotification;

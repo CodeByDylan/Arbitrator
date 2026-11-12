@@ -1,6 +1,6 @@
 # 10. Scoped sender, transient components
 
-- **Status:** Accepted
+- **Status:** Accepted, partly superseded by [38](0038-configurable-component-lifetimes.md)
 - **Date:** 2026-11-07
 - **Design:** [requests and pipeline](../design/requests-and-pipeline.md)
 

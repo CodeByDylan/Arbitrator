@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Arbitrator.Registration;
 
@@ -57,13 +58,14 @@ internal sealed class RegisteredBehaviors
     /// Plans the pipeline of a new handler contract from the behaviors registered so far.
     /// </summary>
     /// <param name="contract">The handler contract.</param>
+    /// <param name="handlerLifetime">The lifetime the handler is registered with.</param>
     /// <returns>The pipeline plan.</returns>
     /// <exception cref="ArbitratorConfigurationException">A behavior would run twice in the pipeline.</exception>
     [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
     [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
-    public PipelinePlan PlanPipeline(HandlerContract contract)
+    public PipelinePlan PlanPipeline(HandlerContract contract, ServiceLifetime handlerLifetime)
     {
-        var plan = new PipelinePlan(contract);
+        var plan = new PipelinePlan(contract, handlerLifetime);
         AppendAll(plan, PlanFor(contract));
         return plan;
     }

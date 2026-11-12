@@ -319,6 +319,34 @@ builder.Services.AddArbitrator(arbitrator => arbitrator
   excludes all of them, or an assembly whose types (or a handler's attributes) can't be loaded is a configuration error
   that names the assembly.
 
+## Lifetimes
+
+Handlers and behaviors are transient by default: every send, stream read, and publish gets new instances. Every
+registration method has an overload that takes a `ServiceLifetime`, for components that are expensive to construct or
+that need state for one scope:
+
+```csharp
+builder.Services.AddArbitrator(arbitrator => arbitrator
+    .AddHandler<GetCustomerHandler>()
+    .AddHandler<PriceQuoteHandler>(ServiceLifetime.Singleton)
+    .AddOpenBehavior(typeof(LoggingBehavior<,>), ServiceLifetime.Singleton)
+    .AddHandlersFromAssemblyContaining<GetCustomerHandler>(
+        type => type != typeof(GetCustomerHandler) && type != typeof(PriceQuoteHandler),
+        ServiceLifetime.Scoped));
+```
+
+- **Scoped** components are shared by every send, read, and publish in one scope, including concurrent ones.
+  **Singleton** components are shared by the whole application. Neither may keep request-specific state, and
+  Arbitrator doesn't make them thread-safe.
+- **Don't capture scoped services in a singleton.** A singleton handler that depends on a `DbContext` keeps the first
+  one it gets for the application's lifetime. Turn on `ValidateOnBuild` and `ValidateScopes`, at least in development
+  and in a startup test, and the container reports this when it's built.
+- **One lifetime per registration.** An open behavior's lifetime applies to every type it's closed over, and a scan's
+  lifetime to every handler it registers; split scans with filters to mix lifetimes. A class registered both as a
+  request handler and as a notification handler can have a different lifetime in each role.
+- **Inspection reports them.** `ArbitratorRegistrations` lists each handler and behavior with its lifetime, so a test
+  can assert them.
+
 ## Testing your configuration
 
 Arbitrator validates registrations early, but it can't know whether every request type you define has a handler. A
@@ -376,7 +404,7 @@ public async Task Every_request_type_has_a_handler()
 | Handler or behavior throws | The same exception instance reaches the caller |
 | Token already canceled | The send, or the stream read, is canceled before anything is constructed. A stream observes both its `StreamAsync` token and the read's token |
 | Cancellation during the send or read | Forwarded only. Handlers decide how to observe it |
-| Lifetimes | `ISender` and `IPublisher` are scoped. Handlers, notification handlers, and behaviors are transient |
+| Lifetimes | `ISender` and `IPublisher` are scoped. Handlers, notification handlers, and behaviors are transient unless registered with another lifetime |
 | Disposal | The scope disposes handlers and behaviors when it ends |
 | Registration after the provider was built | `ArbitratorConfigurationException` when that provider resolves `ISender` or `IPublisher` |
 | Registration on a read-only collection | `ArbitratorConfigurationException`, and nothing is registered |
