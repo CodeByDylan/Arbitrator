@@ -1,19 +1,30 @@
 #nullable enable
 Arbitrator.ArbitratorBuilder
 Arbitrator.ArbitratorBuilder.AddBehavior<TBehavior>() -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddBehavior<TBehavior>(Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime) -> Arbitrator.ArbitratorBuilder!
 Arbitrator.ArbitratorBuilder.AddHandler<THandler>() -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddHandler<THandler>(Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime) -> Arbitrator.ArbitratorBuilder!
 Arbitrator.ArbitratorBuilder.AddHandlersFromAssembly(System.Reflection.Assembly! assembly) -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddHandlersFromAssembly(System.Reflection.Assembly! assembly, Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime) -> Arbitrator.ArbitratorBuilder!
 Arbitrator.ArbitratorBuilder.AddHandlersFromAssembly(System.Reflection.Assembly! assembly, System.Func<System.Type!, bool>! filter) -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddHandlersFromAssembly(System.Reflection.Assembly! assembly, System.Func<System.Type!, bool>! filter, Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime) -> Arbitrator.ArbitratorBuilder!
 Arbitrator.ArbitratorBuilder.AddHandlersFromAssemblyContaining<TMarker>() -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddHandlersFromAssemblyContaining<TMarker>(Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime) -> Arbitrator.ArbitratorBuilder!
 Arbitrator.ArbitratorBuilder.AddHandlersFromAssemblyContaining<TMarker>(System.Func<System.Type!, bool>! filter) -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddHandlersFromAssemblyContaining<TMarker>(System.Func<System.Type!, bool>! filter, Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime) -> Arbitrator.ArbitratorBuilder!
 Arbitrator.ArbitratorBuilder.AddNotificationHandler<THandler>() -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddNotificationHandler<THandler>(Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime) -> Arbitrator.ArbitratorBuilder!
 Arbitrator.ArbitratorBuilder.AddOpenBehavior(System.Type! openBehaviorType) -> Arbitrator.ArbitratorBuilder!
+Arbitrator.ArbitratorBuilder.AddOpenBehavior(System.Type! openBehaviorType, Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime) -> Arbitrator.ArbitratorBuilder!
 Arbitrator.ArbitratorConfigurationException
 Arbitrator.ArbitratorConfigurationException.ArbitratorConfigurationException(string! message) -> void
 Arbitrator.ArbitratorConfigurationException.ArbitratorConfigurationException(string! message, System.Exception? innerException) -> void
 Arbitrator.ArbitratorRegistrations
 Arbitrator.ArbitratorRegistrations.Notifications.get -> System.Collections.Generic.IReadOnlyList<Arbitrator.NotificationRegistration!>!
 Arbitrator.ArbitratorRegistrations.Requests.get -> System.Collections.Generic.IReadOnlyList<Arbitrator.RequestRegistration!>!
+Arbitrator.ComponentRegistration
+Arbitrator.ComponentRegistration.ImplementationType.get -> System.Type!
+Arbitrator.ComponentRegistration.Lifetime.get -> Microsoft.Extensions.DependencyInjection.ServiceLifetime
 Arbitrator.INotification
 Arbitrator.INotificationBehavior<TNotification>
 Arbitrator.INotificationBehavior<TNotification>.HandleAsync(TNotification notification, System.Type! handlerType, Arbitrator.NotificationContinuation! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
@@ -41,11 +52,15 @@ Arbitrator.IStreamRequestHandler<TRequest, TItem>.HandleAsync(TRequest request, 
 Arbitrator.NotificationContinuation
 Arbitrator.NotificationRegistration
 Arbitrator.NotificationRegistration.BehaviorTypes.get -> System.Collections.Generic.IReadOnlyList<System.Type!>!
+Arbitrator.NotificationRegistration.Behaviors.get -> System.Collections.Generic.IReadOnlyList<Arbitrator.ComponentRegistration!>!
 Arbitrator.NotificationRegistration.HandlerTypes.get -> System.Collections.Generic.IReadOnlyList<System.Type!>!
+Arbitrator.NotificationRegistration.Handlers.get -> System.Collections.Generic.IReadOnlyList<Arbitrator.ComponentRegistration!>!
 Arbitrator.NotificationRegistration.NotificationType.get -> System.Type!
 Arbitrator.RequestContinuation<TResponse>
 Arbitrator.RequestRegistration
 Arbitrator.RequestRegistration.BehaviorTypes.get -> System.Collections.Generic.IReadOnlyList<System.Type!>!
+Arbitrator.RequestRegistration.Behaviors.get -> System.Collections.Generic.IReadOnlyList<Arbitrator.ComponentRegistration!>!
+Arbitrator.RequestRegistration.Handler.get -> Arbitrator.ComponentRegistration!
 Arbitrator.RequestRegistration.HandlerType.get -> System.Type!
 Arbitrator.RequestRegistration.IsStream.get -> bool
 Arbitrator.RequestRegistration.RequestType.get -> System.Type!
