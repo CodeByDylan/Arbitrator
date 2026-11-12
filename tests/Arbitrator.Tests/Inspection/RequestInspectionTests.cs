@@ -134,6 +134,24 @@ public sealed class RequestInspectionTests
             Task.FromResult(request.Length);
     }
 
+    [Test]
+    public async Task Component_entries_report_lifetimes_in_the_order_of_the_type_lists()
+    {
+        await using TestHost host = TestHost.Create(arbitrator => arbitrator
+            .AddOpenBehavior(typeof(FirstBehavior<,>), ServiceLifetime.Singleton)
+            .AddOpenBehavior(typeof(SecondBehavior<,>), ServiceLifetime.Scoped)
+            .AddHandler<PingHandler>(ServiceLifetime.Scoped));
+
+        RequestRegistration request = host.Registrations.Requests.Single();
+
+        await Assert.That(request.Handler.ImplementationType).IsEqualTo(request.HandlerType);
+        await Assert.That(request.Behaviors.Select(behavior => behavior.ImplementationType))
+            .IsEquivalentTo(request.BehaviorTypes, CollectionOrdering.Matching);
+        await Assert.That(request.Behaviors.Select(behavior => behavior.Lifetime)).IsEquivalentTo(
+            [ServiceLifetime.Singleton, ServiceLifetime.Scoped],
+            CollectionOrdering.Matching);
+    }
+
     public interface IValidated;
 
     public sealed class ValidatedOnlyBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>

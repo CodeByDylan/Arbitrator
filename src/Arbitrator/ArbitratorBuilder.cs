@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Reflection;
 using Arbitrator.Registration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -13,9 +12,9 @@ namespace Arbitrator;
 /// all <c>AddArbitrator</c> calls on a service collection: the first registered behavior is the outermost. The order
 /// of handler registrations relative to behavior registrations does not matter. Notification handlers run in the
 /// order they are registered across all <c>AddArbitrator</c> calls. Handlers, notification handlers, and behaviors
-/// are transient.
+/// are transient unless they are registered with another <see cref="ServiceLifetime"/>.
 /// </remarks>
-public sealed class ArbitratorBuilder
+public sealed partial class ArbitratorBuilder
 {
     private readonly ArbitratorRegistry _registry;
     private readonly IServiceCollection _services;
@@ -32,7 +31,7 @@ public sealed class ArbitratorBuilder
     }
 
     /// <summary>
-    /// Registers a handler for every handler contract it implements.
+    /// Registers a transient handler for every handler contract it implements.
     /// </summary>
     /// <typeparam name="THandler">
     /// A concrete class implementing <see cref="IRequestHandler{TRequest, TResponse}"/>,
@@ -52,67 +51,33 @@ public sealed class ArbitratorBuilder
         [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] THandler>()
         where THandler : class
     {
-        EnsureServicesAreWritable();
-        AddServices(_registry.RegisterHandler(typeof(THandler)));
-        return this;
+        return AddHandler<THandler>(ServiceLifetime.Transient);
     }
 
+    /// <inheritdoc cref="AddHandler{THandler}()"/>
     /// <summary>
-    /// Registers a closed behavior at the next position in the pipeline order. It applies to every behavior contract
-    /// it implements.
+    /// Registers a handler with a lifetime for every handler contract it implements.
     /// </summary>
-    /// <typeparam name="TBehavior">
-    /// A concrete class implementing <see cref="IPipelineBehavior{TRequest, TResponse}"/>,
-    /// <see cref="IStreamPipelineBehavior{TRequest, TItem}"/>, or <see cref="INotificationBehavior{TNotification}"/>
-    /// one or more times.
-    /// </typeparam>
-    /// <returns>This builder.</returns>
-    /// <exception cref="ArbitratorConfigurationException">
-    /// The behavior type is abstract, implements no behavior contract, is already registered, or would run twice; or
-    /// a service provider has attempted to resolve <see cref="ISender"/> or <see cref="IPublisher"/>; or the service
-    /// collection is read-only.
-    /// </exception>
-    public ArbitratorBuilder AddBehavior<
-        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] TBehavior>()
-        where TBehavior : class
-    {
-        EnsureServicesAreWritable();
-        AddServices(_registry.RegisterClosedBehavior(typeof(TBehavior)));
-        return this;
-    }
-
-    /// <summary>
-    /// Registers an open generic behavior at the next position in the pipeline order. It applies to every request or
-    /// notification of its kind whose types satisfy the runtime generic constraints of the behavior.
-    /// </summary>
-    /// <param name="openBehaviorType">
-    /// A generic type definition, such as <c>typeof(LoggingBehavior&lt;,&gt;)</c>, that implements exactly one of
-    /// <see cref="IPipelineBehavior{TRequest, TResponse}"/>, <see cref="IStreamPipelineBehavior{TRequest, TItem}"/>,
-    /// or <see cref="INotificationBehavior{TNotification}"/> with its type parameters in order.
+    /// <param name="lifetime">
+    /// The lifetime of the handler. A scoped or singleton handler is shared by every dispatch that resolves it, so it
+    /// must not keep request-specific state, and a singleton must not depend on scoped services.
     /// </param>
-    /// <returns>This builder.</returns>
-    /// <exception cref="ArgumentNullException">
-    /// <paramref name="openBehaviorType"/> is <see langword="null"/>.
-    /// </exception>
-    /// <exception cref="ArbitratorConfigurationException">
-    /// The type is not a suitable generic type definition, is already registered, or would run twice for a request;
-    /// or a service provider has attempted to resolve <see cref="ISender"/> or <see cref="IPublisher"/>; or the service
-    /// collection is read-only.
-    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="lifetime"/> is not a defined value.</exception>
     [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
     [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
-    public ArbitratorBuilder AddOpenBehavior(
-        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type openBehaviorType)
+    public ArbitratorBuilder AddHandler<
+        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] THandler>(ServiceLifetime lifetime)
+        where THandler : class
     {
-        ArgumentNullException.ThrowIfNull(openBehaviorType);
+        EnsureLifetimeIsDefined(lifetime);
         EnsureServicesAreWritable();
-        AddServices(_registry.RegisterOpenBehavior(openBehaviorType));
+        AddServices(_registry.RegisterHandler(typeof(THandler), lifetime));
         return this;
     }
 
     /// <summary>
-    /// Registers a notification handler for every notification contract it implements. For each notification type,
-    /// it runs after every handler registered before it.
+    /// Registers a transient notification handler for every notification contract it implements. For each
+    /// notification type, it runs after every handler registered before it.
     /// </summary>
     /// <typeparam name="THandler">
     /// A concrete class implementing <see cref="INotificationHandler{TNotification}"/> one or more times.
@@ -129,94 +94,45 @@ public sealed class ArbitratorBuilder
         [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] THandler>()
         where THandler : class
     {
+        return AddNotificationHandler<THandler>(ServiceLifetime.Transient);
+    }
+
+    /// <inheritdoc cref="AddNotificationHandler{THandler}()"/>
+    /// <summary>
+    /// Registers a notification handler with a lifetime for every notification contract it implements. For each
+    /// notification type, it runs after every handler registered before it.
+    /// </summary>
+    /// <param name="lifetime">
+    /// The lifetime of the handler. A scoped or singleton handler is shared by every publish that resolves it, so it
+    /// must not keep notification-specific state, and a singleton must not depend on scoped services.
+    /// </param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="lifetime"/> is not a defined value.</exception>
+    [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
+    [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
+    public ArbitratorBuilder AddNotificationHandler<
+        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] THandler>(ServiceLifetime lifetime)
+        where THandler : class
+    {
+        EnsureLifetimeIsDefined(lifetime);
         EnsureServicesAreWritable();
-        AddServices(_registry.RegisterNotificationHandler(typeof(THandler)));
+        AddServices(_registry.RegisterNotificationHandler(typeof(THandler), lifetime));
         return this;
     }
 
     /// <summary>
-    /// Registers every request handler and notification handler class that an assembly defines.
+    /// Rejects a lifetime that is not one of the values <see cref="ServiceLifetime"/> defines.
     /// </summary>
-    /// <remarks>
-    /// Every concrete, non-generic class implementing a handler contract is registered, whatever its visibility, in
-    /// ordinal order of full type names. Behaviors are never registered by a scan.
-    /// </remarks>
-    /// <param name="assembly">The assembly to scan.</param>
-    /// <returns>This builder.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="assembly"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArbitratorConfigurationException">
-    /// Some types of the assembly, or the attributes of a handler type, cannot be loaded, or it defines no handler
-    /// types; or a handler type found is invalid or already registered, as <see cref="AddHandler{THandler}"/> and
-    /// <see cref="AddNotificationHandler{THandler}"/> report it; or a service provider has attempted to resolve
-    /// <see cref="ISender"/> or <see cref="IPublisher"/>; or the service collection is read-only. Nothing is
-    /// registered.
-    /// </exception>
-    [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
-    [RequiresUnreferencedCode(RegistrationReflection.ScanningMessage)]
-    public ArbitratorBuilder AddHandlersFromAssembly(Assembly assembly)
+    /// <param name="lifetime">The lifetime passed to a registration method.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="lifetime"/> is not a defined value.</exception>
+    private static void EnsureLifetimeIsDefined(ServiceLifetime lifetime)
     {
-        return AddHandlersFromAssembly(assembly, static _ => true);
-    }
-
-    /// <summary>
-    /// Registers the request handler and notification handler classes of an assembly that a filter accepts.
-    /// </summary>
-    /// <remarks>
-    /// The filter sees each handler type once, in ordinal order of full type names, and its exceptions propagate
-    /// unchanged. Accepted types are registered in that order. Behaviors are never registered by a scan.
-    /// </remarks>
-    /// <param name="assembly">The assembly to scan.</param>
-    /// <param name="filter">Returns <see langword="true"/> for each handler type to register.</param>
-    /// <returns>This builder.</returns>
-    /// <exception cref="ArgumentNullException">
-    /// <paramref name="assembly"/> or <paramref name="filter"/> is <see langword="null"/>.
-    /// </exception>
-    /// <exception cref="ArbitratorConfigurationException">
-    /// As for <see cref="AddHandlersFromAssembly(Assembly)"/>, or the filter excludes every handler type.
-    /// </exception>
-    [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
-    [RequiresUnreferencedCode(RegistrationReflection.ScanningMessage)]
-    public ArbitratorBuilder AddHandlersFromAssembly(Assembly assembly, Func<Type, bool> filter)
-    {
-        ArgumentNullException.ThrowIfNull(assembly);
-        ArgumentNullException.ThrowIfNull(filter);
-        EnsureServicesAreWritable();
-
-        DiscoveredHandlers handlers = HandlerAssemblyScanner.Discover(assembly, filter);
-        AddServices(_registry.RegisterDiscoveredHandlers(handlers));
-        return this;
-    }
-
-    /// <summary>
-    /// Registers every request handler and notification handler class of the assembly that defines a marker type.
-    /// </summary>
-    /// <typeparam name="TMarker">Any type defined in the assembly to scan.</typeparam>
-    /// <returns>This builder.</returns>
-    /// <exception cref="ArbitratorConfigurationException">
-    /// See <see cref="AddHandlersFromAssembly(Assembly)"/>.
-    /// </exception>
-    [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
-    [RequiresUnreferencedCode(RegistrationReflection.ScanningMessage)]
-    public ArbitratorBuilder AddHandlersFromAssemblyContaining<TMarker>()
-    {
-        return AddHandlersFromAssembly(typeof(TMarker).Assembly);
-    }
-
-    /// <summary>
-    /// Registers the handler classes a filter accepts from the assembly that defines a marker type.
-    /// </summary>
-    /// <typeparam name="TMarker">Any type defined in the assembly to scan.</typeparam>
-    /// <param name="filter">Returns <see langword="true"/> for each handler type to register.</param>
-    /// <returns>This builder.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="filter"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArbitratorConfigurationException">
-    /// See <see cref="AddHandlersFromAssembly(Assembly, Func{Type, bool})"/>.
-    /// </exception>
-    [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
-    [RequiresUnreferencedCode(RegistrationReflection.ScanningMessage)]
-    public ArbitratorBuilder AddHandlersFromAssemblyContaining<TMarker>(Func<Type, bool> filter)
-    {
-        return AddHandlersFromAssembly(typeof(TMarker).Assembly, filter);
+        if (!Enum.IsDefined(lifetime))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(lifetime),
+                lifetime,
+                "The lifetime must be Transient, Scoped, or Singleton.");
+        }
     }
 
     /// <summary>

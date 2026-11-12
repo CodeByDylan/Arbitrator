@@ -4,7 +4,7 @@ namespace Arbitrator.Tests.Support;
 
 /// <summary>
 /// A stream behavior that records its name before the read, for each item, and after the read, and captures the token
-/// it receives.
+/// it receives and itself.
 /// </summary>
 /// <typeparam name="TRequest">The request type.</typeparam>
 /// <typeparam name="TItem">The item type.</typeparam>
@@ -33,6 +33,7 @@ public abstract class RecordingStreamBehavior<TRequest, TItem> : IStreamPipeline
     {
         _journal.Record($"{_name}.before");
         _journal.Capture(new ObservedToken(_name, cancellationToken));
+        _journal.Capture(this);
 
         await foreach (TItem item in next(cancellationToken))
         {

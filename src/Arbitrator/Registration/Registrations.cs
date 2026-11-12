@@ -75,22 +75,24 @@ internal sealed class Registrations
     /// registrations so far.
     /// </summary>
     /// <param name="handlerType">The handler type.</param>
+    /// <param name="lifetime">The lifetime the handler is registered with.</param>
     /// <returns>The descriptors for the handler and for the open behaviors that now apply to its requests.</returns>
     /// <exception cref="ArbitratorConfigurationException">The registration is invalid.</exception>
     [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
     [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
     public IReadOnlyList<ServiceDescriptor> RegisterHandler(
-        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type handlerType)
+        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type handlerType,
+        ServiceLifetime lifetime)
     {
         Pipelines.EnsureHandlerTypeIsNew(handlerType);
         IReadOnlyList<HandlerContract> contracts = HandlerTypeInspector.GetContracts(handlerType);
         Pipelines.EnsureRequestTypesHaveNoHandler(contracts);
-        PipelinePlan[] plans = [.. contracts.Select(Behaviors.PlanPipeline)];
+        PipelinePlan[] plans = [.. contracts.Select(contract => Behaviors.PlanPipeline(contract, lifetime))];
 
         Pipelines.AddRange(plans);
         return
         [
-            ComponentDescriptors.ForRequestComponent(handlerType),
+            ComponentDescriptors.ForRequestHandler(handlerType, lifetime),
             .. plans.SelectMany(ComponentDescriptors.ForOpenBehaviors),
         ];
     }
@@ -100,6 +102,7 @@ internal sealed class Registrations
     /// handler registered so far.
     /// </summary>
     /// <param name="handlerType">The notification handler type.</param>
+    /// <param name="lifetime">The lifetime the handler is registered with.</param>
     /// <returns>
     /// The descriptors for the handler and for the open behaviors that now wrap the handlers of its notification types.
     /// </returns>
@@ -107,7 +110,8 @@ internal sealed class Registrations
     [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
     [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
     public IReadOnlyList<ServiceDescriptor> RegisterNotificationHandler(
-        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type handlerType)
+        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type handlerType,
+        ServiceLifetime lifetime)
     {
         NotificationHandlers.EnsureHandlerTypeIsNew(handlerType);
         IReadOnlyList<NotificationHandlerContract> contracts =
@@ -115,10 +119,10 @@ internal sealed class Registrations
         NotificationPlan[] newPlans =
             [.. NotificationHandlers.FindUnplannedTypes(contracts).Select(Behaviors.PlanNotification)];
 
-        NotificationHandlers.Add(handlerType, contracts, newPlans);
+        NotificationHandlers.Add(new ComponentRegistration(handlerType, lifetime), contracts, newPlans);
         return
         [
-            ComponentDescriptors.ForNotificationHandler(handlerType),
+            ComponentDescriptors.ForNotificationHandler(handlerType, lifetime),
             .. newPlans.SelectMany(ComponentDescriptors.ForOpenBehaviors),
         ];
     }
@@ -128,14 +132,16 @@ internal sealed class Registrations
     /// applies to.
     /// </summary>
     /// <param name="behaviorType">The closed behavior type.</param>
+    /// <param name="lifetime">The lifetime the behavior is registered with in every role.</param>
     /// <returns>The descriptors for the behavior.</returns>
     /// <exception cref="ArbitratorConfigurationException">The registration is invalid.</exception>
     public IReadOnlyList<ServiceDescriptor> RegisterClosedBehavior(
-        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type behaviorType)
+        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type behaviorType,
+        ServiceLifetime lifetime)
     {
         Behaviors.EnsureTypeIsNew(behaviorType);
         ClosedBehaviorRegistration registration =
-            BehaviorTypeInspector.InspectClosed(behaviorType, Behaviors.NextPosition);
+            BehaviorTypeInspector.InspectClosed(behaviorType, Behaviors.NextPosition, lifetime);
 
         BehaviorPlacement[] placements =
             [.. Pipelines.PlaceClosedBehavior(registration), .. NotificationHandlers.PlaceClosedBehavior(registration)];
@@ -149,15 +155,18 @@ internal sealed class Registrations
     /// whose types satisfy its generic constraints.
     /// </summary>
     /// <param name="behaviorType">The generic type definition of the behavior.</param>
+    /// <param name="lifetime">The lifetime every closed instantiation of the behavior is registered with.</param>
     /// <returns>The descriptors for the closed behavior types that now apply.</returns>
     /// <exception cref="ArbitratorConfigurationException">The registration is invalid.</exception>
     [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
     [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
     public IReadOnlyList<ServiceDescriptor> RegisterOpenBehavior(
-        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type behaviorType)
+        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type behaviorType,
+        ServiceLifetime lifetime)
     {
         Behaviors.EnsureTypeIsNew(behaviorType);
-        OpenRegistration registration = BehaviorTypeInspector.InspectOpen(behaviorType, Behaviors.NextPosition);
+        OpenRegistration registration =
+            BehaviorTypeInspector.InspectOpen(behaviorType, Behaviors.NextPosition, lifetime);
         List<BehaviorPlacement> placements = registration switch
         {
             OpenBehaviorRegistration open => Pipelines.PlaceOpenBehavior(open),

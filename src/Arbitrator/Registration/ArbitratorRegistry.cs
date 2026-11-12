@@ -67,17 +67,19 @@ internal sealed class ArbitratorRegistry
     /// Registers a handler type for every handler contract it implements.
     /// </summary>
     /// <param name="handlerType">The handler type.</param>
+    /// <param name="lifetime">The lifetime the handler is registered with.</param>
     /// <returns>The descriptors for the handler and for the open behaviors that now apply to its requests.</returns>
     /// <exception cref="ArbitratorConfigurationException">The registration is invalid.</exception>
     [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
     [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
     public IReadOnlyList<ServiceDescriptor> RegisterHandler(
-        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type handlerType)
+        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type handlerType,
+        ServiceLifetime lifetime)
     {
         lock (_gate)
         {
             EnsureNotFrozen();
-            return _registrations.RegisterHandler(handlerType);
+            return _registrations.RegisterHandler(handlerType, lifetime);
         }
     }
 
@@ -85,15 +87,17 @@ internal sealed class ArbitratorRegistry
     /// Registers a closed behavior at the next registration position.
     /// </summary>
     /// <param name="behaviorType">The closed behavior type.</param>
+    /// <param name="lifetime">The lifetime the behavior is registered with in every role.</param>
     /// <returns>The descriptors for the behavior.</returns>
     /// <exception cref="ArbitratorConfigurationException">The registration is invalid.</exception>
     public IReadOnlyList<ServiceDescriptor> RegisterClosedBehavior(
-        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type behaviorType)
+        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type behaviorType,
+        ServiceLifetime lifetime)
     {
         lock (_gate)
         {
             EnsureNotFrozen();
-            return _registrations.RegisterClosedBehavior(behaviorType);
+            return _registrations.RegisterClosedBehavior(behaviorType, lifetime);
         }
     }
 
@@ -101,17 +105,19 @@ internal sealed class ArbitratorRegistry
     /// Registers an open behavior at the next registration position.
     /// </summary>
     /// <param name="behaviorType">The generic type definition of the behavior.</param>
+    /// <param name="lifetime">The lifetime every closed instantiation of the behavior is registered with.</param>
     /// <returns>The descriptors for the closed behavior types that now apply.</returns>
     /// <exception cref="ArbitratorConfigurationException">The registration is invalid.</exception>
     [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
     [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
     public IReadOnlyList<ServiceDescriptor> RegisterOpenBehavior(
-        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type behaviorType)
+        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type behaviorType,
+        ServiceLifetime lifetime)
     {
         lock (_gate)
         {
             EnsureNotFrozen();
-            return _registrations.RegisterOpenBehavior(behaviorType);
+            return _registrations.RegisterOpenBehavior(behaviorType, lifetime);
         }
     }
 
@@ -120,17 +126,19 @@ internal sealed class ArbitratorRegistry
     /// handler registered so far.
     /// </summary>
     /// <param name="handlerType">The notification handler type.</param>
+    /// <param name="lifetime">The lifetime the handler is registered with.</param>
     /// <returns>The descriptors for the handler and for the open behaviors that now wrap it.</returns>
     /// <exception cref="ArbitratorConfigurationException">The registration is invalid.</exception>
     [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
     [RequiresUnreferencedCode(RegistrationReflection.UnreferencedCodeMessage)]
     public IReadOnlyList<ServiceDescriptor> RegisterNotificationHandler(
-        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type handlerType)
+        [DynamicallyAccessedMembers(RegistrationReflection.ComponentMembers)] Type handlerType,
+        ServiceLifetime lifetime)
     {
         lock (_gate)
         {
             EnsureNotFrozen();
-            return _registrations.RegisterNotificationHandler(handlerType);
+            return _registrations.RegisterNotificationHandler(handlerType, lifetime);
         }
     }
 
@@ -138,11 +146,14 @@ internal sealed class ArbitratorRegistry
     /// Registers handlers discovered in an assembly as one unit: either every handler is registered, or none is.
     /// </summary>
     /// <param name="handlers">The discovered handlers.</param>
+    /// <param name="lifetime">The lifetime every discovered handler is registered with.</param>
     /// <returns>The descriptors for every registered handler and for the open behaviors that now apply.</returns>
     /// <exception cref="ArbitratorConfigurationException">A registration is invalid.</exception>
     [RequiresDynamicCode(RegistrationReflection.DynamicCodeMessage)]
     [RequiresUnreferencedCode(RegistrationReflection.ScanningMessage)]
-    public IReadOnlyList<ServiceDescriptor> RegisterDiscoveredHandlers(DiscoveredHandlers handlers)
+    public IReadOnlyList<ServiceDescriptor> RegisterDiscoveredHandlers(
+        DiscoveredHandlers handlers,
+        ServiceLifetime lifetime)
     {
         lock (_gate)
         {
@@ -152,12 +163,12 @@ internal sealed class ArbitratorRegistry
 
             foreach (Type handlerType in handlers.RequestHandlerTypes)
             {
-                descriptors.AddRange(candidate.RegisterHandler(handlerType));
+                descriptors.AddRange(candidate.RegisterHandler(handlerType, lifetime));
             }
 
             foreach (Type handlerType in handlers.NotificationHandlerTypes)
             {
-                descriptors.AddRange(candidate.RegisterNotificationHandler(handlerType));
+                descriptors.AddRange(candidate.RegisterNotificationHandler(handlerType, lifetime));
             }
 
             _registrations = candidate;

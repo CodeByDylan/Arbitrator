@@ -64,6 +64,17 @@ internal sealed class PlannedBehaviors
     public ImmutableArray<Type> ClosedTypes() => [.. _behaviors.Select(behavior => behavior.ClosedType)];
 
     /// <summary>
+    /// Describes the planned behaviors with the lifetimes they are registered with, outermost first.
+    /// </summary>
+    /// <returns>The behavior descriptions.</returns>
+    public ImmutableArray<ComponentRegistration> Components()
+    {
+        return [.. _behaviors.Select(behavior => new ComponentRegistration(
+            behavior.ClosedType,
+            behavior.Registration.Lifetime))];
+    }
+
+    /// <summary>
     /// Creates an independent copy, which can change without affecting this list.
     /// </summary>
     /// <returns>The copy.</returns>
