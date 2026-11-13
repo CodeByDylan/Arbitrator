@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-11-08
-- **Design:** [notification pipeline](../design/notification-pipeline.md)
+- **Design:** [notification pipeline](https://github.com/CodeByDylan/Arbitrator/blob/f2bb0a6673fa49c8666cd5d21febda9d0c81993b/docs/design/notification-pipeline.md)
 - **Supersedes:** the "no notification pipeline" part of [22](0022-notifications.md)
 
 ## Context

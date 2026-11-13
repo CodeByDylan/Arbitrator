@@ -1,6 +1,6 @@
 # 24. Documentation layout
 
-- **Status:** Accepted
+- **Status:** Accepted, partly superseded by [41](0041-only-choices-worth-protecting-get-a-record.md) and [42](0042-feature-plans-live-in-the-pull-request.md)
 - **Date:** 2026-11-08
 
 ## Context

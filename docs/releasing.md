@@ -5,7 +5,9 @@ Arbitrator is published to [nuget.org](https://www.nuget.org/packages/Arbitrator
 Trusted Publishing: it exchanges GitHub's short-lived identity token for a one-hour nuget.org API key. No NuGet API key
 is stored anywhere.
 
-The design behind this process is in `docs/design/ci-and-release.md`.
+The design behind this process is
+[`ci-and-release.md`](https://github.com/CodeByDylan/Arbitrator/blob/f2bb0a6673fa49c8666cd5d21febda9d0c81993b/docs/design/ci-and-release.md),
+as of the last commit that kept feature designs.
 
 ## Version rules
 

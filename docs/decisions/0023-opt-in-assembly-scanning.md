@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-11-08
-- **Design:** [assembly scanning](../design/assembly-scanning.md)
+- **Design:** [assembly scanning](https://github.com/CodeByDylan/Arbitrator/blob/f2bb0a6673fa49c8666cd5d21febda9d0c81993b/docs/design/assembly-scanning.md)
 
 ## Context
 
