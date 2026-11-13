@@ -2,7 +2,7 @@
 
 - **Status:** Accepted, partly superseded by [35](0035-per-handler-notification-behaviors.md)
 - **Date:** 2026-11-07
-- **Design:** [notifications](../design/notifications.md)
+- **Design:** [notifications](https://github.com/CodeByDylan/Arbitrator/blob/f2bb0a6673fa49c8666cd5d21febda9d0c81993b/docs/design/notifications.md)
 - **Supersedes:** [17](0017-defer-notifications.md)
 
 ## Context

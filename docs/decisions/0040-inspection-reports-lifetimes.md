@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-11-12
-- **Design:** [configurable lifetimes](../design/configurable-lifetimes.md)
+- **Design:** [configurable lifetimes](https://github.com/CodeByDylan/Arbitrator/blob/f2bb0a6673fa49c8666cd5d21febda9d0c81993b/docs/design/configurable-lifetimes.md)
 
 ## Context
 

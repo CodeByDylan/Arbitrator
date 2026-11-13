@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-11-08
-- **Design:** [registry inspection](../design/registry-inspection.md)
+- **Design:** [registry inspection](https://github.com/CodeByDylan/Arbitrator/blob/f2bb0a6673fa49c8666cd5d21febda9d0c81993b/docs/design/registry-inspection.md)
 
 ## Context
 
